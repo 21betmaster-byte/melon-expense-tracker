@@ -2,6 +2,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppNav } from "@/components/layout/AppNav";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import { ReminderBanner } from "@/components/layout/ReminderBanner";
+import { VerifyEmailBanner } from "@/components/auth/VerifyEmailBanner";
 import { TourProvider } from "@/components/tour/TourProvider";
 import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 
@@ -10,6 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <AuthGuard>
       <TourProvider>
         <FeedbackProvider>
+          <VerifyEmailBanner />
           <OfflineBanner />
           <ReminderBanner />
           <AppNav />

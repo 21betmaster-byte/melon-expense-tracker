@@ -51,9 +51,12 @@ export const LoginForm = () => {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
+      toast.loading("Signing in with Google...", { id: "google-signin" });
       await signInWithGoogle();
+      toast.success("Signed in! Taking you to your dashboard.", { id: "google-signin" });
       router.push("/dashboard");
     } catch (error: unknown) {
+      toast.dismiss("google-signin");
       const code = (error as { code?: string }).code;
       if (code === "auth/unauthorized-domain") {
         toast.error(

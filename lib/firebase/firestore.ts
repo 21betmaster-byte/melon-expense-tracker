@@ -64,35 +64,42 @@ export const createHousehold = async (uid: string): Promise<string> => {
     invite_expires_at: expiresAt,
   });
 
-  // Step 2: Seed default groups and categories in a batch (household doc now exists).
-  const seedBatch = writeBatch(db);
-
-  // Create groups and capture the default group's ID for category seeding (F-09)
-  let defaultGroupId: string | null = null;
-  for (const group of DEFAULT_GROUPS) {
-    const groupRef = doc(collection(db, "households", householdRef.id, "groups"));
-    seedBatch.set(groupRef, group);
-    if (group.is_default) {
-      defaultGroupId = groupRef.id;
-    }
-  }
-
-  // Seed categories with group_id pointing to the default group (F-09)
-  for (const cat of DEFAULT_CATEGORIES) {
-    const catRef = doc(collection(db, "households", householdRef.id, "categories"));
-    seedBatch.set(catRef, {
-      ...cat,
-      ...(defaultGroupId ? { group_id: defaultGroupId } : {}),
-    });
-  }
-
-  await seedBatch.commit();
-
-  // Step 3: Update user's household_id and household_ids
+  // Step 2: Update user's household_id IMMEDIATELY after household doc is created.
+  // This ensures the user always has a household_id even if seeding defaults fails.
   await updateDoc(doc(db, "users", uid), {
     household_id: householdRef.id,
     household_ids: arrayUnion(householdRef.id),
   });
+
+  // Step 3: Seed default groups and categories in a batch (household doc now exists).
+  // Non-blocking: if seeding fails (e.g. Firestore rules), the household still exists
+  // and the user can add groups/categories manually later.
+  try {
+    const seedBatch = writeBatch(db);
+
+    // Create groups and capture the default group's ID for category seeding (F-09)
+    let defaultGroupId: string | null = null;
+    for (const group of DEFAULT_GROUPS) {
+      const groupRef = doc(collection(db, "households", householdRef.id, "groups"));
+      seedBatch.set(groupRef, group);
+      if (group.is_default) {
+        defaultGroupId = groupRef.id;
+      }
+    }
+
+    // Seed categories with group_id pointing to the default group (F-09)
+    for (const cat of DEFAULT_CATEGORIES) {
+      const catRef = doc(collection(db, "households", householdRef.id, "categories"));
+      seedBatch.set(catRef, {
+        ...cat,
+        ...(defaultGroupId ? { group_id: defaultGroupId } : {}),
+      });
+    }
+
+    await seedBatch.commit();
+  } catch (err) {
+    console.error("[createHousehold] Failed to seed defaults (non-fatal):", err);
+  }
 
   return householdRef.id;
 };

@@ -7,7 +7,6 @@ import { useHousehold } from "@/hooks/useHousehold";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useForegroundNotifications } from "@/hooks/useForegroundNotifications";
 import { MelonLoader } from "@/components/ui/MelonLoader";
-import { VerifyEmail } from "@/components/auth/VerifyEmail";
 
 export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
@@ -47,13 +46,8 @@ export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
   if (!firebaseUser) return null;
 
-  // Email verification gate: only for email/password users (Google users are auto-verified)
-  const isPasswordUser = firebaseUser.providerData.some(
-    (p) => p.providerId === "password"
-  );
-  if (isPasswordUser && !firebaseUser.emailVerified) {
-    return <VerifyEmail />;
-  }
+  // Email verification is now handled by a non-blocking banner (VerifyEmailBanner)
+  // in the app layout — users can access the app immediately after signup.
 
   return <>{children}</>;
 };

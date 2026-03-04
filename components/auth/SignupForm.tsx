@@ -30,14 +30,17 @@ export const SignupForm = () => {
 
   const onSubmit = async (values: SignUpValues) => {
     try {
+      toast.loading("Creating your account...", { id: "signup" });
       await signUpWithEmail(values.email, values.password, values.name);
+      toast.success("Account created! Taking you to your dashboard.", { id: "signup" });
       router.push("/dashboard");
     } catch (error: unknown) {
       const code = (error as { code?: string }).code;
       toast.error(
         code === "auth/email-already-in-use"
           ? "An account with this email already exists"
-          : "Sign up failed. Please try again."
+          : "Sign up failed. Please try again.",
+        { id: "signup" }
       );
     }
   };
@@ -49,9 +52,12 @@ export const SignupForm = () => {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
+      toast.loading("Signing in with Google...", { id: "google-signin" });
       await signInWithGoogle();
+      toast.success("Signed in! Taking you to your dashboard.", { id: "google-signin" });
       router.push("/dashboard");
     } catch (error: unknown) {
+      toast.dismiss("google-signin");
       const code = (error as { code?: string }).code;
       if (code === "auth/unauthorized-domain") {
         toast.error(

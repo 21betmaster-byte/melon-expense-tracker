@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { refreshInviteCode } from "@/lib/firebase/firestore";
+import { refreshInviteCode, createHousehold } from "@/lib/firebase/firestore";
 import { updateDoc, doc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAppStore } from "@/store/useAppStore";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, RefreshCw, Mail, Users, Share2 } from "lucide-react";
+import { Copy, Check, RefreshCw, Mail, Users, Share2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCountdown, getInviteUrl, shareInvite } from "@/lib/utils/invite";
@@ -17,7 +17,7 @@ import type { CountdownResult } from "@/lib/utils/invite";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const InvitePartner = () => {
-  const { household, householdLoading, members, setHousehold } = useAppStore();
+  const { household, householdLoading, members, setHousehold, user } = useAppStore();
   const [email, setEmail] = useState(household?.invite_email ?? "");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -116,8 +116,26 @@ export const InvitePartner = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [household?.id, household?.invite_code]);
 
+  // Retry household creation if it's missing
+  const [retrying, setRetrying] = useState(false);
+  const handleRetryHousehold = async () => {
+    if (!user?.uid) return;
+    setRetrying(true);
+    try {
+      await createHousehold(user.uid);
+      toast.success("Household created! Reloading...");
+      // Force page reload to pick up new household
+      window.location.reload();
+    } catch (err) {
+      console.error("[InvitePartner] Failed to create household:", err);
+      toast.error("Failed to create household. Please try again.");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   // Loading state while household data is being fetched
-  if (householdLoading || !household) {
+  if (householdLoading) {
     return (
       <Card className="bg-slate-900 border-slate-800">
         <CardHeader>
@@ -128,6 +146,37 @@ export const InvitePartner = () => {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-500 animate-pulse">Loading invite details…</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Household failed to load or was never created — show retry
+  if (!household) {
+    return (
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-slate-100 flex items-center gap-2 text-base">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            Invite Your Partner
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-slate-400">
+            Your household hasn&apos;t been set up yet. Create one to start inviting your partner.
+          </p>
+          <Button
+            size="sm"
+            onClick={handleRetryHousehold}
+            disabled={retrying}
+            data-testid="retry-household-btn"
+          >
+            {retrying ? (
+              <><RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> Setting up…</>
+            ) : (
+              "Set Up Household"
+            )}
+          </Button>
         </CardContent>
       </Card>
     );
