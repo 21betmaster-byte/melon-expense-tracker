@@ -34,7 +34,16 @@ export const signUpWithEmail = async (
   });
 
   // Auto-create a household for the new user (Enhancement 4)
-  await createHousehold(credential.user.uid);
+  // Non-blocking: if this fails (e.g. Firestore rules), user is still signed in
+  try {
+    await createHousehold(credential.user.uid);
+    // Mark onboarding as completed since household was auto-created
+    if (typeof window !== "undefined") {
+      localStorage.setItem("onboarding_completed", "true");
+    }
+  } catch (err) {
+    console.error("[signUpWithEmail] Failed to auto-create household:", err);
+  }
 
   // Send email verification (Enhancement 2)
   await sendEmailVerification(credential.user).catch(() => {
@@ -60,7 +69,9 @@ export const signInWithGoogle = async (): Promise<User> => {
   // Create user doc if it doesn't exist (first-time Google login)
   const userRef = doc(db, "users", user.uid);
   const snap = await getDoc(userRef);
+
   if (!snap.exists()) {
+    // First-time Google user: create profile + household
     await setDoc(userRef, {
       uid: user.uid,
       email: user.email ?? "",
@@ -69,8 +80,33 @@ export const signInWithGoogle = async (): Promise<User> => {
       created_at: serverTimestamp(),
     });
 
-    // Auto-create a household for the new Google user (Enhancement 4)
-    await createHousehold(user.uid);
+    // Auto-create a household (non-blocking: user is already authed)
+    try {
+      await createHousehold(user.uid);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("onboarding_completed", "true");
+      }
+    } catch (err) {
+      console.error("[signInWithGoogle] Failed to auto-create household:", err);
+    }
+  } else {
+    // Returning Google user: check if they need a household
+    const userData = snap.data();
+    if (!userData?.household_id) {
+      try {
+        await createHousehold(user.uid);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("onboarding_completed", "true");
+        }
+      } catch (err) {
+        console.error("[signInWithGoogle] Failed to create household for returning user:", err);
+      }
+    } else {
+      // Returning user with household — mark onboarding complete
+      if (typeof window !== "undefined") {
+        localStorage.setItem("onboarding_completed", "true");
+      }
+    }
   }
 
   return user;

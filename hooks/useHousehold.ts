@@ -51,6 +51,12 @@ export const useHousehold = () => {
         setHousehold(household);
         const members = await getHouseholdMembers(household.members);
         setMembers(members);
+
+        // Mark onboarding as completed when household data loads successfully
+        // This ensures the feature tour can auto-trigger on dashboard
+        if (typeof window !== "undefined") {
+          localStorage.setItem("onboarding_completed", "true");
+        }
       }
       setGroups(groups);
       setGoals(goals);

@@ -66,6 +66,7 @@ export const LoginForm = () => {
           "Sign-in popup was blocked by your browser. Please allow popups and try again."
         );
       } else {
+        console.error("[LoginForm] Google sign-in error:", error);
         toast.error("Google sign in failed. Please try again.");
       }
     } finally {
