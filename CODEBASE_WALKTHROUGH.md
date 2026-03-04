@@ -1,6 +1,6 @@
 # Expense Tracker - Codebase Walkthrough
 
-> **Last updated:** 2026-03-01 (Phase 16 complete — 9 UX improvements: description mandatory, analytics enhancements, group archival)
+> **Last updated:** 2026-03-04 (Production bug fixes (10) + Enhancements (6) + Push Notifications + SEO Blog Engine)
 > This document is the single source of truth for understanding the codebase architecture.
 > Update after every development session.
 
@@ -14,7 +14,7 @@ expense_tracker/
 │   ├── layout.tsx                   # Root layout with Toaster (sonner) + RSC cleanup script
 │   ├── page.tsx                     # Home → redirect to /dashboard
 │   ├── (app)/                       # Protected routes (AuthGuard)
-│   │   ├── layout.tsx               # App layout: AuthGuard + TourProvider + FeedbackProvider + OfflineBanner + ReminderBanner + AppNav
+│   │   ├── layout.tsx               # App layout: AuthGuard + TourProvider + FeedbackProvider + VerifyEmailBanner + OfflineBanner + ReminderBanner + AppNav
 │   │   ├── dashboard/page.tsx       # Settlement card, quick stats, recent 5 expenses, milestone visit tracking
 │   │   ├── expenses/page.tsx        # Tabbed (All/Recurring) expense list + add dialog + advanced filters + paid-by filter highlighting
 │   │   ├── analytics/page.tsx       # Category pie + trend + MoM trend + category MoM + member contributions + group/currency/time/category filters + insights
@@ -27,7 +27,7 @@ expense_tracker/
 │   ├── invite/[code]/page.tsx       # Dynamic invite validation
 │   └── api/ingest/email/route.ts    # Email ingestion API
 ├── components/
-│   ├── auth/                        # AuthGuard, LoginForm, SignupForm
+│   ├── auth/                        # AuthGuard, LoginForm, SignupForm, VerifyEmailBanner, VerifyEmail (legacy)
 │   ├── layout/                      # AppNav (data-testid="bottom-nav"), GroupSwitcher, OfflineBanner, ReminderBanner
 │   ├── dashboard/                   # SettlementCard, QuickStats
 │   ├── expenses/                    # ExpenseForm, ExpenseCard, ExpenseList, AddExpenseDialog, RecurringList, AdvancedFilters, QuickAddDialog, TemplateChips
@@ -37,7 +37,7 @@ expense_tracker/
 │   ├── feedback/                    # StarRating, FeedbackDialog, FeedbackProvider
 │   ├── settings/                    # InvitePartner, GroupsManager, CategoriesManager, CurrencySelector, HouseholdSwitcher, NotificationSettings, DangerZone, HelpContact
 │   ├── goals/                       # GoalCard
-│   └── ui/                          # shadcn/ui primitives (alert-dialog, button, card, dialog, select, slider, switch, etc.)
+│   └── ui/                          # shadcn/ui primitives + MelonLoader + EmptyState (alert-dialog, button, card, dialog, select, slider, switch, etc.)
 ├── hooks/
 │   ├── useAuth.ts                   # Firebase onAuthStateChanged → store
 │   ├── useHousehold.ts              # Fetch household, groups, categories, goals, members
@@ -50,7 +50,7 @@ expense_tracker/
 ├── lib/
 │   ├── firebase/
 │   │   ├── config.ts                # Firebase init (localStorage auth persistence, Firestore local cache)
-│   │   ├── auth.ts                  # signUp, signIn, signInWithGoogle, logOut, sendPasswordReset, reauthenticate, deleteCurrentUser, getAuthProvider
+│   │   ├── auth.ts                  # signUp (auto-creates household + email verification), signIn, signInWithGoogle (auto-creates household), logOut, sendPasswordReset, reauthenticate, deleteCurrentUser, getAuthProvider
 │   │   ├── firestore.ts            # All Firestore CRUD + subscriptions + multi-household functions
 │   │   ├── messaging.ts            # FCM: requestNotificationPermission, saveFCMToken, removeFCMToken, onForegroundMessage
 │   │   ├── contact.ts              # submitContactMessage() — writes to top-level contact_messages collection
@@ -110,7 +110,10 @@ expense_tracker/
 │   ├── suite-h-invite-enhancements.spec.ts # H245-H262: Invite flow enhancements
 │   ├── suite-h-help-contact.spec.ts       # H290-H299: Help contact
 │   ├── suite-h-feedback.spec.ts           # H300-H314: Feedback collection
-│   └── suite-h-phase16.spec.ts           # H400-H458: Phase 16 UX improvements (9 fixes)
+│   ├── suite-h-phase16.spec.ts           # H400-H458: Phase 16 UX improvements (9 fixes)
+│   ├── suite-h-push-notifications.spec.ts # PN1-PN8: Push notification infrastructure
+│   ├── suite-i-bug-regression.spec.ts    # I1-I22: Bug regression (10 production bugs)
+│   └── suite-j-enhancements.spec.ts     # J1-J14: Enhancement verification (6 enhancements)
 └── playwright.config.ts             # 1 worker, sequential, auth setup dependency
 ```
 
@@ -244,6 +247,7 @@ feedback/{id}                       # Top-level collection (F-25, developer-faci
 
   // Household
   household: Household | null
+  householdLoading: boolean           // True until household data resolves from Firestore
   members: User[]
 
   // Data
@@ -260,7 +264,7 @@ feedback/{id}                       # Top-level collection (F-25, developer-faci
 
   // Actions
   setUser, setFirebaseUser, setAuthLoading
-  setHousehold, setMembers
+  setHousehold, setHouseholdLoading, setMembers
   setGroups, setActiveGroup, setCategories, setAllCategories, addCategoryToStore, setCategoryMemory
   setExpenses, setIsLoading, setGoals
   setSettlements                      // F-18: replace settlements array
@@ -289,7 +293,7 @@ feedback/{id}                       # Top-level collection (F-25, developer-faci
 |----------|---------|-------------|
 | `getUserProfile(uid)` | `User \| null` | users |
 | `updateUserHousehold(uid, householdId)` | void | users |
-| `createHousehold(uid)` | household ID | households, groups, categories, users |
+| `createHousehold(uid)` | household ID | households, users, groups, categories (Step 1: create household doc, Step 2: set user's household_id **immediately**, Step 3: seed defaults in non-blocking try/catch) |
 | `getHousehold(householdId)` | `Household \| null` | households |
 | `getHouseholdByInviteCode(code)` | `{id} \| null` | households |
 | `joinHousehold(householdId, uid)` | "success"\|"full"\|"expired" | households, users |
@@ -401,12 +405,14 @@ feedback/{id}                       # Top-level collection (F-25, developer-faci
   - `StepSuccess.tsx` — Success confirmation with auto-redirect to dashboard
 
 ### TourProvider (`components/tour/TourProvider.tsx`)
-- **Feature discovery tour**: 5-step interactive spotlight tour of dashboard features (~230 lines)
-- **Tour steps**: (1) Add Expense → (2) Settlement → (3) Group Switcher → (4) Bottom Nav → (5) Completion
+- **Feature discovery tour**: 6-step interactive spotlight tour of dashboard features (~380 lines)
+- **Tour steps**: (1) Add Expense → (2) Settlement → (3) Group Switcher → (4) Bottom Nav → (5) Push Notifications → (6) Completion
 - **Spotlight overlay**: Dark overlay with cutout highlighting the target element
 - **Tooltip**: Positioned near spotlight with step description and Next/Skip controls
-- **Auto-trigger**: Tour starts automatically on first dashboard visit when `tour_completed` is not in localStorage
-- **Dismissal**: Escape key dismisses the tour at any point
+- **Auto-trigger**: Tour starts automatically on first dashboard visit when `tour_completed` is not in localStorage. **Polls** for `[data-testid="add-expense-btn"]` existence before starting (500ms interval, 10s timeout safety). If targets never appear, tour is silently skipped.
+- **Safety check**: When `rect` is null (target element not found) AND step is NOT virtual → overlay returns `null` instead of rendering an opaque blocking wall. This prevents Bug 8 (all buttons not working).
+- **Notification step** (Step 5): Virtual centered card "Stay in the loop" with "Enable Notifications" button that calls `requestNotificationPermission()` directly.
+- **Dismissal**: Escape key or clicking the dimmed backdrop dismisses the tour at any point
 - **localStorage persistence**: `tour_completed` key set on tour completion or skip
 - **Replay**: Settings page includes "Replay Tour" button that clears `tour_completed` and restarts the tour
 - **Wrapped in**: `app/(app)/layout.tsx` wraps all protected routes with TourProvider
@@ -440,7 +446,7 @@ feedback/{id}                       # Top-level collection (F-25, developer-faci
 
 ## 7. Seed Data (`lib/seed/defaults.ts`)
 
-**Default Groups**: "Day to day" (is_default: true), "Annual expenses" (is_default: false)
+**Default Groups**: "Day to Day Expenses" (is_default: true), "Annual Expenses" (is_default: false)
 
 **Default Categories (8)**:
 1. Housing & Utilities — rent, electricity, water, internet, maintenance, jio, airtel, bescom, gas
@@ -798,4 +804,59 @@ All 19 features + 5 UX/infra enhancements + 9 P16 UX improvements are implemente
 
 **Test fixes**: H164/H168 updated for Fix 13 (description always optional), H178/H186 selectors broadened for contrast class change (`text-slate-500` → `text-slate-400`), H366 relaxed for headless Chromium notification API limitations. H177 fixed to target `.font-medium` (description element) instead of full card `textContent()` which concatenated sibling text. H178 fixed to use `[class*='border-slate-700']` selector to target category badge specifically rather than any `text-slate-400` element (which also matched date text).
 
-### Total: 460 tests passing (80 core + 380 new features)
+### Total prior to production bugs: 460 tests (80 core + 380 new features)
+
+---
+
+## 12. Production Bug Fixes & Enhancements (2026-03-04)
+
+### 10 Production Bugs Fixed
+
+| Bug # | Description | Root Cause | Fix | File(s) |
+|-------|------------|-----------|-----|---------|
+| 1 | Google Sign-In 404 | Vercel domain not in Firebase authorized domains + generic error messages | Added specific toast messages for `auth/unauthorized-domain`, `auth/popup-closed-by-user`, `auth/popup-blocked` | `LoginForm.tsx`, `SignupForm.tsx` |
+| 2 | Signup "nothing happens" | Email verification gate in AuthGuard blocked entire app after signup | Replaced full-screen VerifyEmail gate with non-blocking `VerifyEmailBanner` | `AuthGuard.tsx`, NEW `VerifyEmailBanner.tsx`, `app/(app)/layout.tsx` |
+| 3 | Loading too long / blank screen | Same as Bug 2 + MelonLoader during authLoading | Non-blocking banner + branded MelonLoader during auth loading only | `AuthGuard.tsx`, NEW `MelonLoader.tsx` |
+| 4 | Invite partner button not working | `createHousehold` set `household_id` AFTER seeding defaults; if seed failed, user had no `household_id` | Reordered: set `household_id` immediately after household doc creation, before seeding. Added retry button in InvitePartner. | `lib/firebase/firestore.ts`, `InvitePartner.tsx` |
+| 5 | Groups not clickable | Components rendered before household data loaded | Added `householdLoading` state to Zustand, disabled inputs until data loads | `GroupsManager.tsx`, `store/useAppStore.ts`, `hooks/useHousehold.ts` |
+| 6 | Categories not clickable | Same as Bug 5 | Same pattern with `householdLoading` | `CategoriesManager.tsx` |
+| 7 | Help contact button not working | No loading state when `user` is null, generic error handling | Disabled send button when user not loaded, detect `permission-denied` error | `HelpContact.tsx` |
+| 8 | ALL buttons not working | Tour overlay rendered full-screen opaque wall when target elements hadn't mounted | Tour polls for first target before starting (500ms interval, 10s safety). Overlay returns `null` when `rect` is null and step is not virtual. | `TourProvider.tsx` |
+| 9 | Push notification toggle broken | VAPID key validation missing, service worker registration unhandled | Added VAPID key check, wrapped SW registration in try/catch, specific error messages | `lib/firebase/messaging.ts`, `NotificationSettings.tsx` |
+| 10 | Category dropdown empty in expense form | Dropdown rendered before categories loaded from Firestore | Added "Loading categories..." placeholder, toast when `activeGroup` is null | `ExpenseForm.tsx` |
+
+### 6 Enhancements Shipped
+
+| # | Enhancement | Description | File(s) |
+|---|------------|-------------|---------|
+| 1 | MelonLoader | Branded full-screen loader with melon emoji, spinner, message prop | NEW `components/ui/MelonLoader.tsx`, `AuthGuard.tsx` |
+| 2 | Email verification banner | Non-blocking amber banner at top of app for unverified password users. Polls `firebaseUser.reload()` every 10s. Dismissible. Resend button with 60s cooldown. | NEW `components/auth/VerifyEmailBanner.tsx`, `app/(app)/layout.tsx` |
+| 3 | Empty state screens | Reusable EmptyState component with icon, title, description, optional action button | NEW `components/ui/EmptyState.tsx` |
+| 4 | Auto-create household on signup | `signUpWithEmail` and `signInWithGoogle` auto-call `createHousehold` (non-blocking). Sets `onboarding_completed` localStorage flag. Redirects to `/dashboard` instead of `/onboarding`. | `lib/firebase/auth.ts`, `SignupForm.tsx`, `LoginForm.tsx` |
+| 5 | Renamed default groups | "Day to day" → "Day to Day Expenses", "Annual expenses" → "Annual Expenses" | `lib/seed/defaults.ts` |
+| 6 | Tooltips for all actions | Radix Tooltip on all interactive buttons: group add, category add, copy/share invite, help send, notification toggle, etc. | `GroupsManager.tsx`, `CategoriesManager.tsx`, `InvitePartner.tsx`, `HelpContact.tsx`, `NotificationSettings.tsx`, `ExpenseForm.tsx` |
+
+### Key Architecture Decisions
+
+**`createHousehold` resilience pattern:**
+```
+Step 1: Create household doc (setDoc)
+Step 2: Set user's household_id immediately (updateDoc) ← moved up from step 3
+Step 3: Seed defaults in non-blocking try/catch (writeBatch) ← failure is non-fatal
+```
+
+**Email verification approach:**
+- Old: Full-screen gate in AuthGuard → blocked entire app → users thought "nothing happened"
+- New: `VerifyEmailBanner` component in app layout → amber banner at top → users see dashboard immediately
+- Banner polls `firebaseUser.reload()` every 10s, auto-dismisses when verified
+- Dismissible via X button; shows "Resend" with 60s cooldown
+
+**Auth flow with progress feedback:**
+- Signup: `toast.loading("Creating your account...")` → `toast.success("Account created!")` → `router.push("/dashboard")`
+- Google: `toast.loading("Signing in with Google...")` → `toast.success("Signed in!")` → `router.push("/dashboard")`
+
+### Test Coverage Added
+
+- **Suite I (Bug Regression):** I1-I22 (22 tests) — Covers all 10 bugs + additional regression tests for bugs 2b, 3b, 4b
+- **Suite J (Enhancement Verification):** J1-J14 (14 tests) — Covers all 6 enhancements + push notification tour step
+- **Total:** 496+ tests (460 prior + 36 new)

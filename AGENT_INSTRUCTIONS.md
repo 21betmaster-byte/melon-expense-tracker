@@ -106,8 +106,8 @@ All operational data is siloed under the root `households` collection to strictl
 Upon Household creation, the database MUST be seeded with the following defaults:
 
 **Default Groups:**
-1. `name: "Day to day"`, `is_default: true`
-2. `name: "Annual expenses"`, `is_default: false`
+1. `name: "Day to Day Expenses"`, `is_default: true`
+2. `name: "Annual Expenses"`, `is_default: false`
 
 **Default Categories (JSON Map):**
 ```json
@@ -126,8 +126,9 @@ Upon Household creation, the database MUST be seeded with the following defaults
 ## 4. User Journeys & Core Logic
 ### 4.1 Authentication & Onboarding Flow
 1. **Sign Up/Login:** Users authenticate via Email/Password or Google OAuth.
-2. **Household Creation:** User clicks "Create Household". App generates Household Doc, adds User UID to `members`, seeds default categories/groups, and generates an Invite Link (`/invite/[code]`).
-3. **Household Join:** Partner accesses Invite Link, logs in, and their UID is appended to the `members` array. Max capacity enforced (2 members).
+2. **Auto Household Creation:** On signup (email or Google), the app auto-creates a household. Steps: (a) Create household doc, (b) Set user's `household_id` immediately, (c) Seed default groups/categories in non-blocking try/catch. If seeding fails, user still has a household.
+3. **Email Verification:** For email/password signups, a verification email is sent (non-blocking). A dismissible amber banner in the app layout reminds users to verify, but does NOT block access to the app.
+4. **Household Join:** Partner accesses Invite Link, logs in, and their UID is appended to the `members` array. Max capacity enforced (2 members).
 
 ### 4.2 Context Switching (Expense Groups)
 * **The Global Toggle:** A prominent top-nav dropdown allows users to switch the active Expense Group (defaults to "Day to day").
@@ -238,6 +239,29 @@ All forms must enforce these strict rules before triggering a database write:
 1. **Offline Read:** Disable network. Reload page. Assert app shell and cached IndexedDB expenses render correctly.
 2. **Offline Write:** Disable network. Log ₹300 expense. Assert optimistic UI update with "Pending Sync" indicator.
 3. **Background Sync:** Re-enable network. Assert "Pending Sync" resolves and Firestore `onSnapshot` confirms remote write.
+### Suite I: Bug Regression (22 tests)
+Regression coverage for all 10 production bugs:
+1. Google Sign-In error handling (specific toast messages)
+2. Signup form validation + email verification is non-blocking banner
+3. MelonLoader branding during auth loading
+4. Invite partner with resilient household creation + retry fallback
+5. Groups/categories loading states (disabled until data loads)
+6. Help contact error handling
+7. Tour overlay safety (no blocking when targets missing)
+8. Push notification toggle error messages
+9. Category dropdown loading states
+10. Dashboard accessibility without blocking verification
+
+### Suite J: Enhancement Verification (14 tests)
+Verifies all 6 enhancements:
+1. MelonLoader component
+2. Non-blocking email verification banner
+3. Empty state screens
+4. Auto-create household on signup
+5. Renamed default groups
+6. Tooltips on interactive elements
+7. Push notification step in feature tour
+
 ---
 ## 7. Execution Plan & Deployment Gates
 ### Execution Sequence:
@@ -248,8 +272,28 @@ All forms must enforce these strict rules before triggering a database write:
 * **Phase 5:** Build Recharts Analytics dashboard.
 * **Phase 6:** Scaffold `/api/ingest/email` webhook and write Playwright E2E tests.
 * **Phase 7:** Push notifications — Firebase Admin SDK, API route `/api/notifications/send`, notification payload builders, foreground toast hook, service worker config fix, and trigger wiring in ExpenseForm + SettlementCard.
+* **Phase 8:** Production bug fixes (10 bugs) + Enhancements (6) + SEO blog engine + comprehensive documentation.
 
 ### Deployment Success Gates (CI/CD):
 1. 100/100 Google Lighthouse PWA score.
 2. 100% Playwright Test Pass Rate.
 3. Zero TypeScript or ESLint errors.
+
+---
+## 8. Production Environment
+
+### URLs
+* **Production:** https://expensetracker-kappa-six.vercel.app
+* **GitHub:** https://github.com/21betmaster-byte/melon-expense-tracker
+
+### Firebase Configuration Required
+1. **Authorized Domains:** Add Vercel domain to Firebase Console → Authentication → Settings → Authorized domains
+2. **Environment Variables:** Set in Vercel project settings (see `.env.local` template in README)
+3. **Firestore Security Rules:** Must allow `createHousehold` writes for authenticated users
+
+### Key Architectural Patterns
+1. **createHousehold resilience:** Sets `household_id` before seeding defaults. Seed failure is non-fatal.
+2. **Non-blocking email verification:** Banner component, not a gate. Users access app immediately.
+3. **householdLoading state:** Zustand `householdLoading: boolean` prevents data race conditions. Components show disabled/loading states until data resolves.
+4. **Tour safety:** Polls for target elements before starting. Returns null when targets missing (prevents opaque blocking wall).
+5. **Auth progress feedback:** Toast loading/success messages during signup and Google sign-in flows.

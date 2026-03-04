@@ -311,6 +311,11 @@ setup("authenticate", async ({ page }) => {
     console.warn("⚠️  Could not get auth info from browser — skipping profile check");
   }
 
+  // Ensure tour is marked as completed so it doesn't auto-trigger in tests
+  await page.evaluate(() => {
+    localStorage.setItem("tour_completed", "true");
+  });
+
   // Give Firebase SDK a moment to finish writing auth tokens to IndexedDB
   await page.waitForTimeout(2000);
 

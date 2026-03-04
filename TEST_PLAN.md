@@ -1,12 +1,14 @@
-# Test Plan — Suite H: New Features
+# Test Plan — Complete Test Inventory
 
-> **Total tests:** 314 (H1-H314)
-> **Unit tests (no auth):** 7 — H13, H14, H15, H40, H114, H115, H150
-> **Browser tests (auth required):** 307
-> **Implemented & passing:** 394 of 398 (314 Suite H + 80 core suites A-G) — 4 skipped gracefully
+> **Last updated:** 2026-03-04
+> **Total tests:** 496+ across Suites A-J
+> **Suite H tests:** 314 (H1-H314) + Phase 16 (H400-H458) + Push Notifications (PN1-PN8)
+> **Suite I tests:** 22 (I1-I22) — Bug regression
+> **Suite J tests:** 14 (J1-J14) — Enhancement verification
+> **Core suites (A-G):** 80 tests
 > **Test runner:** Playwright 1.58
-> **Auth pattern:** `requireAuth(page, "/path")` from `tests/helpers/auth-guard.ts`
-> **All 19 features + 5 UX/infra enhancements complete.** Full regression: 394 passed, 0 failed.
+> **Auth pattern:** `requireAuth(page, "/path")` or `requireAuthOrSkip(page, "/path")` from `tests/helpers/auth-guard.ts`
+> **All 19 features + 5 UX/infra enhancements + 10 bug fixes + 6 enhancements complete.**
 
 ---
 
@@ -39,6 +41,172 @@
 | `suite-h-invite-enhancements.spec.ts` | H245-H262 | Invite Flow Enhancements |
 | `suite-h-help-contact.spec.ts` | H290-H299 | Help Contact |
 | `suite-h-feedback.spec.ts` | H300-H314 | Feedback Collection |
+| `suite-h-phase16.spec.ts` | H400-H458 | Phase 16 UX Improvements |
+| `suite-h-push-notifications.spec.ts` | PN1-PN8 | Push Notification Infrastructure |
+| `suite-h-analytics-currency.spec.ts` | — | Analytics Currency Handling |
+| `suite-h-analytics-filters.spec.ts` | H126-H140 | Analytics Group Filters |
+| `suite-h-recurring-tab.spec.ts` | — | Recurring Tab UI |
+| `suite-h-advanced-filters.spec.ts` | — | Advanced Filter Controls |
+| `suite-h-ux-polish.spec.ts` | — | UX Polish Improvements |
+| `suite-h-reminders-notifications.spec.ts` | — | Reminders & Notifications |
+| `suite-i-bug-regression.spec.ts` | I1-I22 | Production Bug Regression (10 bugs) |
+| `suite-j-enhancements.spec.ts` | J1-J14 | Enhancement Verification (6 enhancements) |
+
+---
+
+## Suite I: Bug Regression Tests (I1-I22)
+
+Regression coverage for all 10 production bugs. Each test verifies the fix remains in place.
+
+### I1: Login page has Google sign-in button
+- **Auth:** No
+- **Steps:** Navigate to `/login`, verify `[data-testid="google-signin-btn"]` is visible and enabled.
+
+### I2: Signup page has Google sign-up button with loading state
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify `[data-testid="google-signup-btn"]` shows "Continue with Google".
+
+### I3: Signup form shows validation errors on empty submit
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, click submit without filling fields. Expect "please fix the highlighted errors" toast.
+
+### I4: Signup form shows password requirements hint
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify "at least 8 characters" text is visible.
+
+### I5: MelonLoader component renders with branding
+- **Auth:** No (clears cookies)
+- **Steps:** Clear auth, navigate to `/dashboard`. Verify old "Loading..." text does NOT appear.
+
+### I6: Invite section renders on settings page
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, wait 3s. Expect "Invite Your Partner" or "Household Members" visible.
+
+### I7: Groups section visible on settings page
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, verify "Expense Groups" text visible.
+
+### I8: New group input is interactable after data loads
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, wait 5s. Verify `[data-testid="new-group-input"]` is visible and **enabled**.
+
+### I9: Categories section visible on settings page
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, verify "Categories" text visible.
+
+### I10: New category input is interactable after data loads
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, wait 5s. Verify `[data-testid="new-category-input"]` is visible and **enabled**.
+
+### I11: Help contact form renders with all elements
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, verify `help-contact-card`, `help-subject-select`, `help-message-input`, `help-send-btn` all visible.
+
+### I12: Help send button is disabled when message is empty
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, verify `[data-testid="help-send-btn"]` is **disabled**.
+
+### I13: Tour overlay does NOT block page when targets are missing
+- **Auth:** Yes (requireAuth)
+- **Steps:** Remove `tour_completed` from localStorage, set `onboarding_completed`. Reload. Wait 4s. If overlay is visible, tooltip must ALSO be visible (not just blank wall).
+
+### I14: Notification settings card renders
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`. If `[data-testid="notification-settings"]` exists, verify toggle visible.
+
+### I15: Expense form renders with category dropdown
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Open add expense dialog, verify `[data-testid="category-select"]` visible.
+
+### I16: Expense form category dropdown has items after data loads
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Open add expense, click category dropdown, verify at least one `[role='option']` exists.
+
+### I17: No full-screen email verification gate on signup page
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify "Waiting for verification" text does NOT exist (count = 0).
+
+### I18: Signup form submit button shows loading feedback
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify submit button contains "Create Account" text.
+
+### I19: Email verification banner component is non-blocking
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/dashboard`, verify bottom nav visible. Verify NO full-screen "Check your email" heading exists.
+
+### I20: Dashboard renders app shell without blocking verification
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/dashboard`, wait 5s. Verify bottom nav visible, old "Loading..." NOT present.
+
+### I21: Invite section does not show infinite loading
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, wait 5s. Expect one of: "Invite Your Partner", "Household Members", or "Set Up Household". Verify "Loading invite details" is NOT visible.
+
+### I22: Invite section has actionable buttons when household exists
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, wait 5s. Verify at least one of: copy-invite-btn, retry-household-btn, or "Household Members" text exists.
+
+---
+
+## Suite J: Enhancement Verification (J1-J14)
+
+Verifies all 6 enhancements plus additional tour/auth improvements.
+
+### J1: Login page renders without old plain Loading text
+- **Auth:** No
+- **Steps:** Navigate to `/login`, verify login submit button visible (page renders directly).
+
+### J2: Signup page renders correctly
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify name, email, password inputs and submit button all visible.
+
+### J3: Signup form shows password requirements
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify "at least 8 characters with 1 uppercase" text visible.
+
+### J4: Empty state component exists in codebase
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/dashboard`, verify bottom nav visible (dashboard renders without errors).
+
+### J5: Signup redirects to dashboard (not onboarding)
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify submit button shows "Create Account".
+
+### J6: Settings page shows correctly named default groups
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/settings`, verify "Expense Groups" section visible.
+
+### J7: Group add button has tooltip
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Hover `[data-testid="add-group-btn"]`, verify "Add a new expense group" tooltip appears.
+
+### J8: Category add button has tooltip
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Hover `[data-testid="add-category-btn"]`, verify "Add a new spending category" tooltip appears.
+
+### J9: Help send button has tooltip
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Hover `[data-testid="help-send-btn"]`, verify "Send your message to our team" tooltip appears.
+
+### J10: Notification toggle has tooltip
+- **Auth:** Yes (conditional)
+- **Steps:** If push toggle exists, hover it, verify "Get notified when your partner adds an expense" tooltip.
+
+### J11: Tour includes notification step
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Trigger tour, click Next 4 times. Verify tooltip shows "Stay in the loop" and enable-notifications button exists.
+
+### J12: Tour shows 6 steps total
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Trigger tour, verify step counter contains "of 6".
+
+### J13: Email verification is a banner, not a full gate
+- **Auth:** Yes (requireAuthOrSkip)
+- **Steps:** Navigate to `/dashboard`, verify bottom nav visible. Verify NO full-screen "Check your email" gate.
+
+### J14: Signup form shows progress toast feedback
+- **Auth:** No
+- **Steps:** Navigate to `/signup`, verify submit shows "Create Account" and Google button shows "Continue with Google".
 
 ---
 

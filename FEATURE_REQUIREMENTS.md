@@ -1,10 +1,11 @@
 # Feature Requirements Document (FRD)
 
-> **Project:** Secure Household Expense Tracker PWA
-> **Version:** 6.0
-> **Date:** 2026-02-27
-> **Scope:** 19 features + 5 UX/infra enhancements + Phase 15 UX Overhaul (17 fixes) + Phase 16 UX Improvements (9 fixes) — ALL COMPLETE ✅
-> **Tests:** 502 total (422 Suite H + 80 core suites A-G)
+> **Project:** Melon - Secure Household Expense Tracker PWA
+> **Version:** 7.0
+> **Date:** 2026-03-04
+> **Scope:** 19 features + 5 UX/infra enhancements + Phase 15 UX Overhaul (17 fixes) + Phase 16 UX Improvements (9 fixes) + Push Notifications + 10 Production Bug Fixes + 6 Enhancements + SEO Blog Engine — ALL COMPLETE
+> **Tests:** 496+ total (314 Suite H + 58 Phase 16 + 8 Push + 22 Bug Regression + 14 Enhancement + 80 core suites A-G)
+> **Production:** [expensetracker-kappa-six.vercel.app](https://expensetracker-kappa-six.vercel.app)
 
 ---
 
@@ -1393,3 +1394,109 @@ interface ExpenseGroup { ...; is_archived?: boolean; }
 | Form Layout | H445-H448 (4) | Side-by-side, single-line notes, submit visibility, spacing |
 | Group Archival | H450-H454 (5) | Active groups, archive button, archived section, create |
 | Analytics Stability | H455-H458 (5) | All sections render, combined filters, responsive |
+
+---
+
+## Push Notifications (F-PN)
+
+**Status:** COMPLETE
+
+### Requirements
+- Real-time push notifications when partner creates/edits expenses or records settlements
+- Server-side Firebase Admin SDK via `POST /api/notifications/send`
+- Foreground: Sonner toast via `useForegroundNotifications` hook
+- Background: Native browser push via `firebase-messaging-sw.js`
+- User opt-in via Settings > Push Notifications toggle
+- FCM token stored on user doc as `fcm_token` field
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `lib/firebase/admin.ts` | Firebase Admin SDK singleton (base64-encoded service account) |
+| `app/api/notifications/send/route.ts` | POST endpoint: validates, resolves partner, sends FCM |
+| `lib/notifications/buildNotificationPayload.ts` | Pure functions for human-readable notification strings |
+| `lib/notifications/sendPushNotification.ts` | Client-side fire-and-forget API caller |
+| `hooks/useForegroundNotifications.ts` | `onForegroundMessage()` listener → Sonner toast |
+| `lib/firebase/messaging.ts` | FCM token management (request, save, remove, foreground) |
+| `public/firebase-messaging-sw.js` | Background push handler + notification click navigation |
+| `components/settings/NotificationSettings.tsx` | UI toggle for push notifications |
+
+### Tests: PN1-PN8 (8 tests in `suite-h-push-notifications.spec.ts`)
+
+---
+
+## Production Bug Fixes (BF-01 to BF-10)
+
+**Status:** ALL FIXED
+
+### Bug Tracker
+
+| # | Bug | Root Cause | Fix | Tests |
+|---|-----|-----------|-----|-------|
+| BF-01 | Google Sign-In 404 error | Vercel domain not in Firebase authorized domains + generic error | Specific toast messages for `auth/unauthorized-domain`, `auth/popup-closed-by-user`, `auth/popup-blocked` | I1, I2 |
+| BF-02 | Signup "nothing happens" | Email verification gate blocked entire app in AuthGuard | Non-blocking `VerifyEmailBanner` in app layout instead of full-screen gate | I3, I4, I17, I18, I19 |
+| BF-03 | Loading too long / blank screen | Same as BF-02 + no branded loader | MelonLoader during auth loading, non-blocking banner | I5, I20 |
+| BF-04 | Invite partner button not working | `createHousehold` set `household_id` AFTER seeding; seed failure = no household_id | Reordered: set `household_id` before seeding + retry button in InvitePartner | I6, I21, I22 |
+| BF-05 | Groups not clickable | Components rendered before household data loaded from Firestore | `householdLoading` state + disabled inputs until data resolves | I7, I8 |
+| BF-06 | Categories not clickable | Same race condition as BF-05 | Same `householdLoading` pattern | I9, I10 |
+| BF-07 | Help contact button not working | No loading state when user is null, generic error handling | Disabled when user not loaded, `permission-denied` detection | I11, I12 |
+| BF-08 | ALL buttons not working | Tour overlay rendered opaque wall when target elements missing | Poll for targets before starting + null check in overlay render | I13 |
+| BF-09 | Push notification toggle broken | Missing VAPID key validation, unhandled SW registration errors | VAPID check, SW try/catch, specific error toasts | I14 |
+| BF-10 | Category dropdown empty | Dropdown rendered before categories loaded | Loading placeholder, toast when activeGroup null | I15, I16 |
+
+### Key Architecture Changes
+
+**`createHousehold` resilience:**
+```
+Step 1: Create household doc (setDoc)
+Step 2: Set user's household_id (updateDoc) ← moved BEFORE seeding
+Step 3: Seed defaults in non-blocking try/catch ← failure is non-fatal
+```
+
+**Email verification flow:**
+- Old: Full-screen VerifyEmail gate in AuthGuard → blocked app → "nothing happened"
+- New: `VerifyEmailBanner` in app layout → amber banner → users see dashboard immediately
+- Banner polls every 10s, dismissible, resend with 60s cooldown
+
+**Auth flow progress feedback:**
+- `toast.loading("Creating your account...")` → `toast.success("Account created!")` → redirect
+- `toast.loading("Signing in with Google...")` → `toast.success("Signed in!")` → redirect
+
+---
+
+## Enhancements (ENH-01 to ENH-06)
+
+**Status:** ALL SHIPPED
+
+| # | Enhancement | Description | Files |
+|---|------------|-------------|-------|
+| ENH-01 | MelonLoader | Branded full-screen loader with melon emoji + spinner + message prop | `components/ui/MelonLoader.tsx` |
+| ENH-02 | Email verification banner | Non-blocking amber banner for unverified email users (polls, dismissible, resend) | `components/auth/VerifyEmailBanner.tsx` |
+| ENH-03 | Empty state screens | Reusable `EmptyState` component with icon, title, description, optional action | `components/ui/EmptyState.tsx` |
+| ENH-04 | Auto-create household | `signUpWithEmail` and `signInWithGoogle` auto-call `createHousehold` (non-blocking) | `lib/firebase/auth.ts` |
+| ENH-05 | Renamed default groups | "Day to Day Expenses" + "Annual Expenses" | `lib/seed/defaults.ts` |
+| ENH-06 | Tooltips | Radix Tooltip on all interactive buttons across Settings, Dashboard, ExpenseForm | Multiple settings/expense components |
+
+### Tests: I17-I22 + J1-J14 (22 + 14 = 36 tests)
+
+---
+
+## SEO Blog Engine
+
+**Status:** COMPLETE
+
+### Features
+- 15 MDX articles across 6 categories
+- Dynamic `[slug]` pages with frontmatter parsing
+- Category index pages at `/blog/category/[category]`
+- Auto-generated `sitemap.xml` and `robots.txt`
+- Marketing landing page at `/`
+- Responsive blog listing at `/blog`
+
+### Categories
+1. budgeting-tracking
+2. expense-splitting
+3. guides
+4. lifestyle
+5. relationships
+6. saving-investing
