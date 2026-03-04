@@ -36,16 +36,31 @@ export async function requestNotificationPermission(): Promise<string | null> {
 
   try {
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+    if (!vapidKey) {
+      throw new Error(
+        "VAPID_KEY_MISSING: Push notification VAPID key is not configured. Please set NEXT_PUBLIC_FIREBASE_VAPID_KEY in your environment variables."
+      );
+    }
+
+    let swRegistration: ServiceWorkerRegistration;
+    try {
+      swRegistration = await navigator.serviceWorker.register(
+        "/firebase-messaging-sw.js"
+      );
+    } catch (swErr) {
+      throw new Error(
+        `SERVICE_WORKER_FAILED: Could not register the push notification service worker. ${swErr instanceof Error ? swErr.message : String(swErr)}`
+      );
+    }
+
     const token = await getToken(msg, {
       vapidKey,
-      serviceWorkerRegistration: await navigator.serviceWorker.register(
-        "/firebase-messaging-sw.js"
-      ),
+      serviceWorkerRegistration: swRegistration,
     });
     return token;
   } catch (err) {
     console.error("Failed to get FCM token:", err);
-    return null;
+    throw err; // Re-throw so caller can show specific error
   }
 }
 

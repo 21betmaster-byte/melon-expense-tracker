@@ -18,6 +18,7 @@ export const useHousehold = () => {
   const {
     user,
     setHousehold,
+    setHouseholdLoading,
     setGroups,
     setActiveGroup,
     setAllCategories,
@@ -30,9 +31,13 @@ export const useHousehold = () => {
   } = useAppStore();
 
   useEffect(() => {
-    if (!user?.household_id) return;
+    if (!user?.household_id) {
+      setHouseholdLoading(false);
+      return;
+    }
 
     const load = async () => {
+      setHouseholdLoading(true);
       const [household, groups, categories, goals, categoryMemory, settlements] = await Promise.all([
         getHousehold(user.household_id!),
         getGroups(user.household_id!),
@@ -106,9 +111,13 @@ export const useHousehold = () => {
           console.warn("Failed to fetch all households");
         }
       }
+
+      setHouseholdLoading(false);
     };
 
-    load();
+    load().catch(() => {
+      setHouseholdLoading(false);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.household_id]);
 };

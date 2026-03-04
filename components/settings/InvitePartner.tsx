@@ -10,13 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Copy, Check, RefreshCw, Mail, Users, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCountdown, getInviteUrl, shareInvite } from "@/lib/utils/invite";
 import type { CountdownResult } from "@/lib/utils/invite";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const InvitePartner = () => {
-  const { household, members, setHousehold } = useAppStore();
+  const { household, householdLoading, members, setHousehold } = useAppStore();
   const [email, setEmail] = useState(household?.invite_email ?? "");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -106,6 +107,31 @@ export const InvitePartner = () => {
       setRefreshing(false);
     }
   };
+
+  // Auto-generate invite code if household exists but has no invite_code
+  useEffect(() => {
+    if (household?.id && !household.invite_code && !refreshing) {
+      handleRefresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [household?.id, household?.invite_code]);
+
+  // Loading state while household data is being fetched
+  if (householdLoading || !household) {
+    return (
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-slate-100 flex items-center gap-2 text-base">
+            <Mail className="w-4 h-4 text-yellow-400" />
+            Invite Your Partner
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-slate-500 animate-pulse">Loading invite details…</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (hasPartner) {
     return (
@@ -205,38 +231,65 @@ export const InvitePartner = () => {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={handleCopy}
-                className="flex-1 gap-1.5"
-                data-testid="copy-invite-btn"
-              >
-                {copied ? (
-                  <><Check className="w-3.5 h-3.5" /> Copied!</>
-                ) : (
-                  <><Copy className="w-3.5 h-3.5" /> Copy Link</>
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleShare}
-                className="flex-1 gap-1.5"
-                data-testid="share-invite-btn"
-              >
-                <Share2 className="w-3.5 h-3.5" /> Share
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="gap-1.5"
-                title="Generate new link (expires old one)"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      onClick={handleCopy}
+                      className="flex-1 gap-1.5"
+                      data-testid="copy-invite-btn"
+                    >
+                      {copied ? (
+                        <><Check className="w-3.5 h-3.5" /> Copied!</>
+                      ) : (
+                        <><Copy className="w-3.5 h-3.5" /> Copy Link</>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Copy invite link to clipboard</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleShare}
+                      className="flex-1 gap-1.5"
+                      data-testid="share-invite-btn"
+                    >
+                      <Share2 className="w-3.5 h-3.5" /> Share
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Share invite via your preferred app</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      className="gap-1.5"
+                      title="Generate new link (expires old one)"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                      Refresh
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Generate a new invite link</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             {countdown && (
               <p

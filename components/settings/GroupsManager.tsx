@@ -7,15 +7,20 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Layers } from "lucide-react";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const GroupsManager = () => {
-  const { household, groups, setGroups } = useAppStore();
+  const { household, householdLoading, groups, setGroups } = useAppStore();
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleAdd = async () => {
     const name = newName.trim();
-    if (!name || !household?.id) return;
+    if (!name) return;
+    if (!household?.id) {
+      toast.error("Still loading your data. Please wait a moment.");
+      return;
+    }
     if (groups.some((g) => g.name.toLowerCase() === name.toLowerCase())) {
       toast.error("A group with that name already exists.");
       return;
@@ -59,6 +64,11 @@ export const GroupsManager = () => {
           ))}
         </div>
 
+        {/* Loading state */}
+        {householdLoading && (
+          <p className="text-sm text-slate-500 animate-pulse">Loading groups…</p>
+        )}
+
         {/* Add new group */}
         <div className="flex gap-2">
           <Input
@@ -68,16 +78,26 @@ export const GroupsManager = () => {
             maxLength={30}
             className="bg-slate-800 border-slate-700 text-sm"
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            disabled={householdLoading}
             data-testid="new-group-input"
           />
-          <Button
-            size="sm"
-            onClick={handleAdd}
-            disabled={loading || !newName.trim()}
-            data-testid="add-group-btn"
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  onClick={handleAdd}
+                  disabled={loading || !newName.trim() || householdLoading}
+                  data-testid="add-group-btn"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add a new expense group</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </CardContent>
     </Card>

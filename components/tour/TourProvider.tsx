@@ -11,6 +11,8 @@ import { usePathname } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { requestNotificationPermission, saveFCMToken } from "@/lib/firebase/messaging";
+import { useAppStore } from "@/store/useAppStore";
 
 /* ─── Tour Step Definitions ────────────────────────────────────────────── */
 
@@ -48,6 +50,13 @@ const TOUR_STEPS: TourStep[] = [
     description:
       "Dashboard, Expenses, Analytics, and Settings — everything at your fingertips.",
     placement: "top",
+  },
+  {
+    target: "tour-notifications", // virtual — centered card
+    title: "Stay in the loop",
+    description:
+      "Enable push notifications so you and your partner always know when a new expense is logged or a settlement happens.",
+    placement: "bottom",
   },
   {
     target: "tour-complete", // virtual — centered card
@@ -105,6 +114,7 @@ export const TourProvider = ({ children }: { children: ReactNode }) => {
       const target = TOUR_STEPS[next].target;
       if (
         target === "tour-complete" ||
+        target === "tour-notifications" ||
         document.querySelector(`[data-testid="${target}"]`)
       ) {
         break;
@@ -130,8 +140,31 @@ export const TourProvider = ({ children }: { children: ReactNode }) => {
     if (localStorage.getItem("onboarding_completed") !== "true") return;
     if (!pathname?.includes("/dashboard")) return;
 
-    const timer = setTimeout(() => startTour(), 1500);
-    return () => clearTimeout(timer);
+    // Poll for the first tour target to exist before starting
+    let cancelled = false;
+    const pollInterval = setInterval(() => {
+      if (cancelled) return;
+      const target = document.querySelector(
+        '[data-testid="add-expense-btn"]'
+      );
+      if (target) {
+        clearInterval(pollInterval);
+        startTour();
+      }
+    }, 500);
+
+    // Safety timeout: if targets never appear after 10s, skip tour entirely
+    const safetyTimeout = setTimeout(() => {
+      cancelled = true;
+      clearInterval(pollInterval);
+      localStorage.setItem("tour_completed", "true");
+    }, 10_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(pollInterval);
+      clearTimeout(safetyTimeout);
+    };
   }, [pathname, startTour]);
 
   /* ── Escape key ────────────────────────────────────────────────── */
@@ -186,9 +219,22 @@ const TourOverlay = ({
   onNext,
   onSkip,
 }: TourOverlayProps) => {
+  const { user } = useAppStore();
   const [rect, setRect] = useState<DOMRect | null>(null);
-  const isVirtual = step.target === "tour-complete";
+  const isVirtual = step.target === "tour-complete" || step.target === "tour-notifications";
   const isLastStep = stepIndex === totalSteps - 1;
+
+  const handleEnableNotifications = async () => {
+    try {
+      const token = await requestNotificationPermission();
+      if (token && user?.uid) {
+        await saveFCMToken(user.uid, token);
+      }
+    } catch {
+      // Ignore — user can enable later in settings
+    }
+    onNext();
+  };
 
   /* ── Measure target element ────────────────────────────────────── */
   useEffect(() => {
@@ -240,6 +286,12 @@ const TourOverlay = ({
       maxWidth: 280,
     };
   };
+
+  // When target element is not found and step is not virtual, don't render
+  // the overlay at all — prevents blocking the entire screen with an opaque wall
+  if (!isVirtual && !rect) {
+    return null;
+  }
 
   return (
     <>
@@ -301,13 +353,26 @@ const TourOverlay = ({
               >
                 Skip tour
               </Button>
-              <Button
-                size="sm"
-                onClick={onNext}
-                data-testid="tour-next-btn"
-              >
-                {isLastStep ? "Get started" : "Next"}
-              </Button>
+              <div className="flex gap-2">
+                {step.target === "tour-notifications" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleEnableNotifications}
+                    data-testid="tour-enable-notifications-btn"
+                    className="text-blue-400 border-blue-500/30"
+                  >
+                    Enable
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={onNext}
+                  data-testid="tour-next-btn"
+                >
+                  {isLastStep ? "Get started" : "Next"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

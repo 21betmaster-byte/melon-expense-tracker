@@ -13,8 +13,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://expensetracker-kappa-six.vercel.app";
+
 export const metadata: Metadata = {
-  title: "Melon — Expense Manager for Couples",
+  metadataBase: new URL(BASE_URL),
+  title: {
+    default: "Melon — Expense Manager for Couples",
+    template: "%s | Melon",
+  },
   description:
     "Manage shared expenses together. Track spending, settle up, and see where your money goes.",
   manifest: "/manifest.json",
@@ -22,6 +29,24 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: "Melon",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Melon",
+    title: "Melon — Expense Manager for Couples",
+    description:
+      "Manage shared expenses together. Track spending, settle up, and see where your money goes.",
+    url: BASE_URL,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Melon — Expense Manager for Couples",
+    description:
+      "Manage shared expenses together. Track spending, settle up, and see where your money goes.",
+  },
+  alternates: {
+    canonical: BASE_URL,
   },
 };
 

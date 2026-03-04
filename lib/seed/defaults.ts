@@ -1,6 +1,6 @@
 export const DEFAULT_GROUPS = [
-  { name: "Day to day", is_default: true },
-  { name: "Annual expenses", is_default: false },
+  { name: "Day to Day Expenses", is_default: true },
+  { name: "Annual Expenses", is_default: false },
 ];
 
 export const DEFAULT_CATEGORIES = [

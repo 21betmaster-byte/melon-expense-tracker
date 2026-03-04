@@ -21,6 +21,7 @@ interface AppState {
 
   // Household
   household: Household | null;
+  householdLoading: boolean;
   members: User[];
 
   // Groups
@@ -52,6 +53,7 @@ interface AppState {
   setFirebaseUser: (user: import("firebase/auth").User | null) => void;
   setAuthLoading: (loading: boolean) => void;
   setHousehold: (household: Household | null) => void;
+  setHouseholdLoading: (loading: boolean) => void;
   setMembers: (members: User[]) => void;
   setGroups: (groups: ExpenseGroup[]) => void;
   setActiveGroup: (group: ExpenseGroup | null) => void;
@@ -142,6 +144,7 @@ const initialState = {
   firebaseUser: null,
   authLoading: true,
   household: null,
+  householdLoading: true,
   members: [],
   groups: [],
   activeGroup: null as ExpenseGroup | null,
@@ -166,6 +169,7 @@ export const useAppStore = create<AppState>()(
       setFirebaseUser: (firebaseUser) => set({ firebaseUser }),
       setAuthLoading: (authLoading) => set({ authLoading }),
       setHousehold: (household) => set({ household }),
+      setHouseholdLoading: (householdLoading) => set({ householdLoading }),
       setMembers: (members) => set({ members }),
       setGroups: (groups) => set({ groups }),
 

@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Bell, BellOff } from "lucide-react";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type PermissionStatus = "default" | "granted" | "denied" | "unsupported";
 
@@ -58,8 +59,19 @@ export const NotificationSettings = () => {
             );
           }
         }
-      } catch {
-        toast.error("Failed to enable notifications.");
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "";
+        if (msg.includes("VAPID_KEY_MISSING")) {
+          toast.error(
+            "Push notifications are not configured yet. The app administrator needs to set up the VAPID key."
+          );
+        } else if (msg.includes("SERVICE_WORKER_FAILED")) {
+          toast.error(
+            "Could not register the notification service. Please try refreshing the page."
+          );
+        } else {
+          toast.error("Failed to enable notifications. Please try again.");
+        }
       } finally {
         setLoading(false);
       }
@@ -115,13 +127,22 @@ export const NotificationSettings = () => {
               </p>
             </div>
           </div>
-          <Switch
-            id="push-toggle"
-            checked={enabled}
-            onCheckedChange={handleToggle}
-            disabled={loading || permStatus === "denied"}
-            data-testid="push-notifications-toggle"
-          />
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Switch
+                  id="push-toggle"
+                  checked={enabled}
+                  onCheckedChange={handleToggle}
+                  disabled={loading || permStatus === "denied"}
+                  data-testid="push-notifications-toggle"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Get notified when your partner adds an expense</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </CardContent>
     </Card>

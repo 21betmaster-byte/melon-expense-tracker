@@ -1,6 +1,7 @@
 "use client";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signUpWithEmail, signInWithGoogle } from "@/lib/firebase/auth";
 import { signUpSchema, type SignUpValues } from "@/lib/utils/validation";
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 
 export const SignupForm = () => {
   const router = useRouter();
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const form = useForm<SignUpValues>({
     resolver: zodResolver(signUpSchema),
@@ -29,7 +31,7 @@ export const SignupForm = () => {
   const onSubmit = async (values: SignUpValues) => {
     try {
       await signUpWithEmail(values.email, values.password, values.name);
-      router.push("/onboarding");
+      router.push("/dashboard");
     } catch (error: unknown) {
       const code = (error as { code?: string }).code;
       toast.error(
@@ -40,12 +42,32 @@ export const SignupForm = () => {
     }
   };
 
+  const onInvalid = (_errors: FieldErrors<SignUpValues>) => {
+    toast.error("Please fix the highlighted errors above.");
+  };
+
   const handleGoogle = async () => {
+    setGoogleLoading(true);
     try {
       await signInWithGoogle();
-      router.push("/onboarding");
-    } catch {
-      toast.error("Google sign in failed.");
+      router.push("/dashboard");
+    } catch (error: unknown) {
+      const code = (error as { code?: string }).code;
+      if (code === "auth/unauthorized-domain") {
+        toast.error(
+          "This domain is not authorized for Google Sign-In. Please contact the app administrator."
+        );
+      } else if (code === "auth/popup-closed-by-user") {
+        toast.error("Sign-in popup was closed. Please try again.");
+      } else if (code === "auth/popup-blocked") {
+        toast.error(
+          "Sign-in popup was blocked by your browser. Please allow popups and try again."
+        );
+      } else {
+        toast.error("Google sign in failed. Please try again.");
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -56,9 +78,10 @@ export const SignupForm = () => {
         variant="outline"
         className="w-full"
         onClick={handleGoogle}
+        disabled={googleLoading}
         data-testid="google-signup-btn"
       >
-        Continue with Google
+        {googleLoading ? "Signing in..." : "Continue with Google"}
       </Button>
 
       <div className="flex items-center gap-3">
@@ -68,7 +91,7 @@ export const SignupForm = () => {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-4">
           <FormField
             control={form.control}
             name="name"
@@ -114,10 +137,13 @@ export const SignupForm = () => {
                   <Input
                     {...field}
                     type="password"
-                    placeholder="Min 8 chars, 1 uppercase, 1 number"
+                    placeholder="••••••••"
                     data-testid="password-input"
                   />
                 </FormControl>
+                <p className="text-xs text-slate-500 mt-1">
+                  At least 8 characters with 1 uppercase letter and 1 number.
+                </p>
                 <FormMessage />
               </FormItem>
             )}
@@ -125,7 +151,7 @@ export const SignupForm = () => {
           <Button
             type="submit"
             className="w-full"
-            disabled={form.formState.isSubmitting}
+            disabled={form.formState.isSubmitting || googleLoading}
             data-testid="signup-submit"
           >
             {form.formState.isSubmitting ? "Creating account..." : "Create Account"}

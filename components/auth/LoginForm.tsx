@@ -53,8 +53,21 @@ export const LoginForm = () => {
     try {
       await signInWithGoogle();
       router.push("/dashboard");
-    } catch {
-      toast.error("Google sign in failed. Please try again.");
+    } catch (error: unknown) {
+      const code = (error as { code?: string }).code;
+      if (code === "auth/unauthorized-domain") {
+        toast.error(
+          "This domain is not authorized for Google Sign-In. Please contact the app administrator."
+        );
+      } else if (code === "auth/popup-closed-by-user") {
+        toast.error("Sign-in popup was closed. Please try again.");
+      } else if (code === "auth/popup-blocked") {
+        toast.error(
+          "Sign-in popup was blocked by your browser. Please allow popups and try again."
+        );
+      } else {
+        toast.error("Google sign in failed. Please try again.");
+      }
     } finally {
       setGoogleLoading(false);
     }

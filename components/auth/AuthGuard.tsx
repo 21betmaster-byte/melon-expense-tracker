@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useHousehold } from "@/hooks/useHousehold";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useForegroundNotifications } from "@/hooks/useForegroundNotifications";
+import { MelonLoader } from "@/components/ui/MelonLoader";
+import { VerifyEmail } from "@/components/auth/VerifyEmail";
 
 export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
@@ -40,14 +42,18 @@ export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   }, [authLoading, firebaseUser, user, router]);
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-slate-400 animate-pulse">Loading…</div>
-      </div>
-    );
+    return <MelonLoader message="Signing you in..." />;
   }
 
   if (!firebaseUser) return null;
+
+  // Email verification gate: only for email/password users (Google users are auto-verified)
+  const isPasswordUser = firebaseUser.providerData.some(
+    (p) => p.providerId === "password"
+  );
+  if (isPasswordUser && !firebaseUser.emailVerified) {
+    return <VerifyEmail />;
+  }
 
   return <>{children}</>;
 };

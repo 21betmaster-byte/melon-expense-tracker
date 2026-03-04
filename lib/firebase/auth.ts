@@ -9,10 +9,12 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   deleteUser,
+  sendEmailVerification,
   type User,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./config";
+import { createHousehold } from "./firestore";
 
 export const signUpWithEmail = async (
   email: string,
@@ -29,6 +31,14 @@ export const signUpWithEmail = async (
     name,
     household_id: null,
     created_at: serverTimestamp(),
+  });
+
+  // Auto-create a household for the new user (Enhancement 4)
+  await createHousehold(credential.user.uid);
+
+  // Send email verification (Enhancement 2)
+  await sendEmailVerification(credential.user).catch(() => {
+    console.warn("Failed to send verification email");
   });
 
   return credential.user;
@@ -58,6 +68,9 @@ export const signInWithGoogle = async (): Promise<User> => {
       household_id: null,
       created_at: serverTimestamp(),
     });
+
+    // Auto-create a household for the new Google user (Enhancement 4)
+    await createHousehold(user.uid);
   }
 
   return user;

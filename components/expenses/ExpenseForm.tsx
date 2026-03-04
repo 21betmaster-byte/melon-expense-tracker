@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Check, Repeat } from "lucide-react";
 import type { Expense, ExpenseType } from "@/types";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { sendPushNotification } from "@/lib/notifications/sendPushNotification";
 import {
   buildExpenseCreatedPayload,
@@ -270,9 +271,15 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
     }
   };
 
+  const { householdLoading } = useAppStore();
+
   const onSubmit = async (values: FormValues) => {
-    if (!user?.household_id || !activeGroup) {
-      toast.error("No active group selected.");
+    if (!user?.household_id) {
+      toast.error("Still loading your data. Please wait a moment.");
+      return;
+    }
+    if (!activeGroup) {
+      toast.error("No active expense group selected. Please go to Settings to create one.");
       return;
     }
 
@@ -550,35 +557,44 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
 
         {/* Split % slider — only for joint expenses */}
         {expenseType === "joint" && (
-          <FormField
-            control={form.control}
-            name="split_pct"
-            render={({ field }) => (
-              <FormItem>
-                <div className="flex items-center justify-between">
-                  <FormLabel>Payer&apos;s Share</FormLabel>
-                  <span className="text-blue-400 font-semibold text-sm">
-                    {field.value}%
-                  </span>
-                </div>
-                <FormControl>
-                  <Slider
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={[field.value]}
-                    onValueChange={([v]) => field.onChange(v)}
-                    className="mt-1"
-                    data-testid="split-ratio-input"
-                  />
-                </FormControl>
-                {splitLabel && (
-                  <p className="text-xs text-slate-400 mt-1">{splitLabel}</p>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <FormField
+                  control={form.control}
+                  name="split_pct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Payer&apos;s Share</FormLabel>
+                        <span className="text-blue-400 font-semibold text-sm">
+                          {field.value}%
+                        </span>
+                      </div>
+                      <FormControl>
+                        <Slider
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={[field.value]}
+                          onValueChange={([v]) => field.onChange(v)}
+                          className="mt-1"
+                          data-testid="split-ratio-input"
+                        />
+                      </FormControl>
+                      {splitLabel && (
+                        <p className="text-xs text-slate-400 mt-1">{splitLabel}</p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Adjust how the expense is split between you and your partner</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Category */}
@@ -598,8 +614,16 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
               </FormLabel>
               <Select onValueChange={handleCategoryChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger data-testid="category-select">
-                    <SelectValue placeholder="Select category" />
+                  <SelectTrigger data-testid="category-select" disabled={householdLoading || !activeGroup}>
+                    <SelectValue placeholder={
+                      householdLoading
+                        ? "Loading categories…"
+                        : !activeGroup
+                        ? "No group selected"
+                        : categories.length === 0
+                        ? "No categories — create one below"
+                        : "Select category"
+                    } />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -714,13 +738,22 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
               <Repeat className="w-4 h-4" />
               Recurring
             </Label>
-            <Switch
-              id="recurring-toggle"
-              checked={isRecurring ?? false}
-              onCheckedChange={(checked) => form.setValue("is_recurring", checked)}
-              data-testid="recurring-toggle"
-              aria-label="Mark as recurring expense"
-            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Switch
+                    id="recurring-toggle"
+                    checked={isRecurring ?? false}
+                    onCheckedChange={(checked) => form.setValue("is_recurring", checked)}
+                    data-testid="recurring-toggle"
+                    aria-label="Mark as recurring expense"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Mark this as a repeating expense</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         )}
 

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { HelpCircle, Send } from "lucide-react";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { submitContactMessage } from "@/lib/firebase/contact";
 import type { ContactSubject } from "@/types";
 
@@ -38,7 +39,11 @@ export const HelpContact = () => {
   const [sending, setSending] = useState(false);
 
   const handleSend = async () => {
-    if (!user || !message.trim()) return;
+    if (!message.trim()) return;
+    if (!user) {
+      toast.error("Still loading your profile. Please wait a moment.");
+      return;
+    }
     setSending(true);
     try {
       await submitContactMessage({
@@ -51,8 +56,13 @@ export const HelpContact = () => {
       toast.success("Message sent! We'll get back to you soon.");
       setMessage("");
       setSubject("General");
-    } catch {
-      toast.error("Failed to send message. Please try again.");
+    } catch (error: unknown) {
+      const code = (error as { code?: string }).code;
+      if (code === "permission-denied") {
+        toast.error("Contact form is temporarily unavailable. Please try again later.");
+      } else {
+        toast.error("Failed to send message. Please try again.");
+      }
     } finally {
       setSending(false);
     }
@@ -118,22 +128,33 @@ export const HelpContact = () => {
         </div>
 
         {/* Send */}
-        <Button
-          size="sm"
-          onClick={handleSend}
-          disabled={sending || !message.trim()}
-          className="w-full gap-1.5"
-          data-testid="help-send-btn"
-        >
-          {sending ? (
-            "Sending…"
-          ) : (
-            <>
-              <Send className="w-3.5 h-3.5" />
-              Send Message
-            </>
-          )}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                onClick={handleSend}
+                disabled={sending || !message.trim() || !user}
+                className="w-full gap-1.5"
+                data-testid="help-send-btn"
+              >
+                {!user ? (
+                  "Loading…"
+                ) : sending ? (
+                  "Sending…"
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    Send Message
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Send your message to our team</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </CardContent>
     </Card>
   );
