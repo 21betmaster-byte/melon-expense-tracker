@@ -2,6 +2,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   sendPasswordResetEmail,
   signOut,
@@ -16,15 +18,21 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./config";
 import { createHousehold } from "./firestore";
 
+// ─── Email Signup ─────────────────────────────────────────────────────────────
+// Fast-return pattern: creates the Firebase Auth user + Firestore profile
+// synchronously, then fires household creation + email verification in the
+// background so the UI can navigate immediately.
+
 export const signUpWithEmail = async (
   email: string,
   password: string,
   name: string
 ): Promise<User> => {
+  // 1. Create Firebase Auth user (required, network call)
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(credential.user, { displayName: name });
 
-  // Create user document in Firestore
+  // 2. Create Firestore user profile (fast — goes to local offline cache)
   await setDoc(doc(db, "users", credential.user.uid), {
     uid: credential.user.uid,
     email,
@@ -33,25 +41,28 @@ export const signUpWithEmail = async (
     created_at: serverTimestamp(),
   });
 
-  // Auto-create a household for the new user (Enhancement 4)
-  // Non-blocking: if this fails (e.g. Firestore rules), user is still signed in
-  try {
-    await createHousehold(credential.user.uid);
-    // Mark onboarding as completed since household was auto-created
-    if (typeof window !== "undefined") {
-      localStorage.setItem("onboarding_completed", "true");
-    }
-  } catch (err) {
-    console.error("[signUpWithEmail] Failed to auto-create household:", err);
+  // 3. Mark onboarding as completed BEFORE background tasks
+  //    Prevents AuthGuard from redirecting to /onboarding while household
+  //    is being created in the background.
+  if (typeof window !== "undefined") {
+    localStorage.setItem("onboarding_completed", "true");
   }
 
-  // Send email verification (Enhancement 2)
-  await sendEmailVerification(credential.user).catch(() => {
-    console.warn("Failed to send verification email");
+  // 4. Fire-and-forget: household creation + email verification
+  //    These run independently — the signup flow returns immediately.
+  //    useAuth will poll for the household_id to appear.
+  createHousehold(credential.user.uid).catch((err) => {
+    console.error("[signUpWithEmail] Background household creation failed:", err);
+  });
+
+  sendEmailVerification(credential.user).catch(() => {
+    console.warn("[signUpWithEmail] Email verification send failed");
   });
 
   return credential.user;
 };
+
+// ─── Email Login ──────────────────────────────────────────────────────────────
 
 export const signInWithEmail = async (
   email: string,
@@ -61,60 +72,109 @@ export const signInWithEmail = async (
   return credential.user;
 };
 
+// ─── Google Sign-In ───────────────────────────────────────────────────────────
+// Uses signInWithPopup with automatic signInWithRedirect fallback for
+// mobile browsers and PWAs where popups are blocked.
+
 export const signInWithGoogle = async (): Promise<User> => {
   const provider = new GoogleAuthProvider();
-  const credential = await signInWithPopup(auth, provider);
-  const user = credential.user;
 
-  // Create user doc if it doesn't exist (first-time Google login)
-  const userRef = doc(db, "users", user.uid);
-  const snap = await getDoc(userRef);
+  let user: User;
+  try {
+    const credential = await signInWithPopup(auth, provider);
+    user = credential.user;
+  } catch (error: unknown) {
+    const code = (error as { code?: string }).code;
 
-  if (!snap.exists()) {
-    // First-time Google user: create profile + household
-    await setDoc(userRef, {
-      uid: user.uid,
-      email: user.email ?? "",
-      name: user.displayName ?? "User",
-      household_id: null,
-      created_at: serverTimestamp(),
-    });
-
-    // Auto-create a household (non-blocking: user is already authed)
-    try {
-      await createHousehold(user.uid);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("onboarding_completed", "true");
-      }
-    } catch (err) {
-      console.error("[signInWithGoogle] Failed to auto-create household:", err);
+    // If popup was blocked or cancelled, fall back to redirect flow.
+    // signInWithRedirect navigates the page away — onAuthStateChanged
+    // will fire when the page loads back, and useAuth handles the rest.
+    if (
+      code === "auth/popup-blocked" ||
+      code === "auth/cancelled-popup-request"
+    ) {
+      await signInWithRedirect(auth, provider);
+      // This line never executes — the browser navigates away
+      throw error;
     }
-  } else {
-    // Returning Google user: check if they need a household
-    const userData = snap.data();
-    if (!userData?.household_id) {
-      try {
-        await createHousehold(user.uid);
-        if (typeof window !== "undefined") {
-          localStorage.setItem("onboarding_completed", "true");
-        }
-      } catch (err) {
-        console.error("[signInWithGoogle] Failed to create household for returning user:", err);
-      }
-    } else {
-      // Returning user with household — mark onboarding complete
-      if (typeof window !== "undefined") {
-        localStorage.setItem("onboarding_completed", "true");
-      }
-    }
+    throw error;
   }
+
+  // Pre-set onboarding flag
+  if (typeof window !== "undefined") {
+    localStorage.setItem("onboarding_completed", "true");
+  }
+
+  // Fire-and-forget: ensure profile + household exist
+  ensureGoogleUserSetup(user);
 
   return user;
 };
 
+/**
+ * Background setup for Google users.
+ * Creates Firestore profile + household if they don't exist.
+ * Runs as fire-and-forget — errors are logged but don't affect the user.
+ */
+function ensureGoogleUserSetup(user: User): void {
+  (async () => {
+    try {
+      const userRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userRef);
+
+      if (!snap.exists()) {
+        // First-time Google user: create profile
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email ?? "",
+          name: user.displayName ?? "User",
+          household_id: null,
+          created_at: serverTimestamp(),
+        });
+        // Create household
+        await createHousehold(user.uid);
+      } else {
+        // Returning user: check if they need a household
+        const userData = snap.data();
+        if (!userData?.household_id) {
+          await createHousehold(user.uid);
+        }
+      }
+    } catch (err) {
+      console.error("[ensureGoogleUserSetup] Background setup failed:", err);
+    }
+  })();
+}
+
+/**
+ * Handle the result of signInWithRedirect (called on page load).
+ * Returns the user if a redirect sign-in just completed, null otherwise.
+ */
+export const handleGoogleRedirectResult = async (): Promise<User | null> => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) {
+      // Pre-set onboarding flag
+      if (typeof window !== "undefined") {
+        localStorage.setItem("onboarding_completed", "true");
+      }
+      // Background setup
+      ensureGoogleUserSetup(result.user);
+      return result.user;
+    }
+  } catch (err) {
+    console.error("[handleGoogleRedirectResult] Error:", err);
+  }
+  return null;
+};
+
+// ─── Password Reset ───────────────────────────────────────────────────────────
+
 export const sendPasswordReset = async (email: string): Promise<void> => {
   await sendPasswordResetEmail(auth, email);
 };
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
 
 export const logOut = async (): Promise<void> => {
   await signOut(auth);

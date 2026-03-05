@@ -39,7 +39,34 @@ export const updateUserHousehold = async (
 
 // ─── Households ──────────────────────────────────────────────────────────────
 
+// Module-level lock to prevent duplicate concurrent household creations
+const _householdCreationLock = new Map<string, Promise<string>>();
+
 export const createHousehold = async (uid: string): Promise<string> => {
+  // Dedup: if a creation is already in progress for this user, return that promise
+  const existing = _householdCreationLock.get(uid);
+  if (existing) return existing;
+
+  const promise = _createHouseholdImpl(uid);
+  _householdCreationLock.set(uid, promise);
+  try {
+    return await promise;
+  } finally {
+    _householdCreationLock.delete(uid);
+  }
+};
+
+const _createHouseholdImpl = async (uid: string): Promise<string> => {
+  // Idempotency: if user already has a household, return it
+  try {
+    const userSnap = await getDoc(doc(db, "users", uid));
+    if (userSnap.exists() && userSnap.data()?.household_id) {
+      return userSnap.data()!.household_id as string;
+    }
+  } catch {
+    // If profile check fails, proceed with creation anyway
+  }
+
   const inviteCode = nanoid(10);
   const expiresAt = Timestamp.fromDate(
     new Date(Date.now() + 48 * 60 * 60 * 1000)

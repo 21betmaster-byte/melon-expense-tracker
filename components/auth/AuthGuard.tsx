@@ -31,8 +31,17 @@ export const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   }, [authLoading, firebaseUser, router]);
 
   useEffect(() => {
-    // If logged in but no household, redirect to onboarding
+    // If logged in but no household, redirect to onboarding.
+    // SKIP this redirect if onboarding_completed is set — it means the
+    // household is being created in the background (signup flow).
+    // useAuth will poll for the household_id to appear.
     if (!authLoading && firebaseUser && user && !user.household_id) {
+      if (
+        typeof window !== "undefined" &&
+        localStorage.getItem("onboarding_completed") === "true"
+      ) {
+        return; // Household creation in progress — don't redirect
+      }
       const pathname = window.location.pathname;
       if (pathname !== "/onboarding") {
         router.push("/onboarding");
