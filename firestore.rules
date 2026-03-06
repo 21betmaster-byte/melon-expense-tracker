@@ -24,7 +24,14 @@ service cloud.firestore {
       allow read:   if isMember(householdId);
       allow create: if isSignedIn() &&
                        request.auth.uid in request.resource.data.members;
-      allow update: if isMember(householdId);
+      allow update: if isMember(householdId) ||
+                       // Allow joining via invite: non-member adds themselves
+                       // if household has room (< 2 members) and only modifies members field
+                       (isSignedIn() &&
+                        request.auth.uid in request.resource.data.members &&
+                        !(request.auth.uid in resource.data.members) &&
+                        resource.data.members.size() < 2 &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']));
       allow delete: if false;
 
       match /groups/{groupId} {

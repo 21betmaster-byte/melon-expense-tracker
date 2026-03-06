@@ -149,7 +149,7 @@ export const getHousehold = async (householdId: string): Promise<Household | nul
 
 export const getHouseholdByInviteCode = async (
   code: string
-): Promise<{ id: string } | null> => {
+): Promise<{ id: string; expires_at?: Timestamp } | null> => {
   const trimmedCode = code.trim();
   console.log("[InviteDebug] getHouseholdByInviteCode called", {
     rawCode: JSON.stringify(code),
@@ -161,9 +161,8 @@ export const getHouseholdByInviteCode = async (
     return null;
   }
 
-  // Strategy: Look up invite code via the invite_codes collection (document ID = code).
-  // This avoids a collection query on households which gets blocked by security rules
-  // when the user isn't a member of any household.
+  // Look up invite code via the invite_codes collection (document ID = code).
+  // This is publicly readable so non-members can validate invite links.
   try {
     const inviteSnap = await getDoc(doc(db, "invite_codes", trimmedCode));
     console.log("[InviteDebug] invite_codes lookup", {
@@ -171,70 +170,51 @@ export const getHouseholdByInviteCode = async (
       data: inviteSnap.exists() ? inviteSnap.data() : null,
     });
     if (inviteSnap.exists()) {
-      const householdId = inviteSnap.data()?.household_id;
+      const data = inviteSnap.data();
+      const householdId = data?.household_id;
       if (householdId) {
         console.log("[InviteDebug] Found household via invite_codes:", householdId);
-        return { id: householdId };
+        return { id: householdId, expires_at: data?.expires_at };
       }
     }
   } catch (err) {
     console.error("[InviteDebug] invite_codes lookup failed:", err);
   }
 
-  // Fallback: try the old collection query (works if user has permission)
-  try {
-    const q = query(
-      collection(db, "households"),
-      where("invite_code", "==", trimmedCode)
-    );
-    const snap = await getDocs(q);
-    console.log("[InviteDebug] Fallback query result", {
-      empty: snap.empty,
-      size: snap.size,
-    });
-    if (snap.empty) return null;
-    const result = { id: snap.docs[0].id, ...snap.docs[0].data() } as { id: string };
-    console.log("[InviteDebug] Found household via fallback:", snap.docs[0].id);
-    return result;
-  } catch (err) {
-    console.error("[InviteDebug] Fallback query also FAILED:", err);
-    return null;
-  }
+  return null;
 };
 
 export const joinHousehold = async (
   householdId: string,
-  uid: string
+  uid: string,
+  inviteExpiresAt?: Timestamp
 ): Promise<"success" | "full" | "expired"> => {
   console.log("[InviteDebug] joinHousehold called", { householdId, uid });
-  const snap = await getDoc(doc(db, "households", householdId));
-  if (!snap.exists()) {
-    console.log("[InviteDebug] Household does not exist:", householdId);
-    return "expired";
+
+  // Check expiry using data from invite_codes (avoids reading household doc,
+  // which non-members don't have permission to read).
+  if (inviteExpiresAt) {
+    const now = Timestamp.now();
+    console.log("[InviteDebug] joinHousehold expiry check", {
+      expires_at: inviteExpiresAt.toDate().toISOString(),
+      now: now.toDate().toISOString(),
+      isExpired: inviteExpiresAt.toMillis() < now.toMillis(),
+    });
+    if (inviteExpiresAt.toMillis() < now.toMillis()) return "expired";
   }
 
-  const data = snap.data();
-  if (!data) {
-    console.log("[InviteDebug] Household data is null");
-    return "expired";
+  // Try to add user to household members. Firestore security rules enforce
+  // that only non-members can join and only if the household has < 2 members.
+  try {
+    await updateDoc(doc(db, "households", householdId), {
+      members: arrayUnion(uid),
+    });
+  } catch (err) {
+    console.error("[InviteDebug] joinHousehold update failed:", err);
+    // Permission denied likely means household is full (rules enforce < 2 members)
+    return "full";
   }
-  const now = Timestamp.now();
 
-  console.log("[InviteDebug] joinHousehold validation", {
-    invite_expires_at: data.invite_expires_at?.toDate?.()?.toISOString(),
-    now: now.toDate().toISOString(),
-    isExpired: !data.invite_expires_at || data.invite_expires_at.toMillis() < now.toMillis(),
-    members: data.members,
-    memberCount: data.members?.length,
-    isFull: !data.members || data.members.length >= 2,
-  });
-
-  if (!data.invite_expires_at || data.invite_expires_at.toMillis() < now.toMillis()) return "expired";
-  if (!data.members || data.members.length >= 2) return "full";
-
-  await updateDoc(doc(db, "households", householdId), {
-    members: arrayUnion(uid),
-  });
   // Update both household_id (active) and household_ids (all)
   await updateDoc(doc(db, "users", uid), {
     household_id: householdId,

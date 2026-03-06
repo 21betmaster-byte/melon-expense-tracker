@@ -23,6 +23,7 @@ export default function InvitePage() {
   const [status, setStatus] = useState<Status>("loading");
   const [joining, setJoining] = useState(false);
   const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [inviteExpiresAt, setInviteExpiresAt] = useState<import("firebase/firestore").Timestamp | undefined>(undefined);
 
   useAuth();
 
@@ -54,6 +55,7 @@ export default function InvitePage() {
           return;
         }
         setHouseholdId(household.id);
+        if (household.expires_at) setInviteExpiresAt(household.expires_at);
         // Code is valid — now check if user is logged in
         if (!firebaseUser) {
           console.log("[InvitePage] Code valid but user not authenticated — setting 'no-auth'");
@@ -76,7 +78,7 @@ export default function InvitePage() {
     if (!firebaseUser || !householdId) return;
     setJoining(true);
     try {
-      const result = await joinHousehold(householdId, firebaseUser.uid);
+      const result = await joinHousehold(householdId, firebaseUser.uid, inviteExpiresAt);
       console.log("[InvitePage] joinHousehold result:", result);
       if (result === "success") {
         const updatedProfile = await getUserProfile(firebaseUser.uid);
