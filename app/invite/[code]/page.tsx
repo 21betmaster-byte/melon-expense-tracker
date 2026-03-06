@@ -27,26 +27,43 @@ export default function InvitePage() {
   useAuth();
 
   useEffect(() => {
-    if (authLoading) return;
+    console.log("[InvitePage] useEffect triggered", {
+      code,
+      codeFromParams: params.code,
+      authLoading,
+      firebaseUser: firebaseUser?.uid ?? null,
+      currentUrl: typeof window !== "undefined" ? window.location.href : "SSR",
+    });
+
+    if (authLoading) {
+      console.log("[InvitePage] Auth still loading, skipping validation");
+      return;
+    }
 
     // Always validate the invite code first — even for unauthenticated users.
     // This way we show "invalid code" immediately rather than asking to sign in
     // for a code that doesn't even exist (better UX + testable without auth).
     const validate = async () => {
       try {
+        console.log("[InvitePage] Calling getHouseholdByInviteCode with code:", JSON.stringify(code));
         const household = await getHouseholdByInviteCode(code);
+        console.log("[InvitePage] getHouseholdByInviteCode result:", household);
         if (!household) {
+          console.log("[InvitePage] No household found — setting status to 'invalid'");
           setStatus("invalid");
           return;
         }
         setHouseholdId(household.id);
         // Code is valid — now check if user is logged in
         if (!firebaseUser) {
+          console.log("[InvitePage] Code valid but user not authenticated — setting 'no-auth'");
           setStatus("no-auth");
         } else {
+          console.log("[InvitePage] Code valid and user authenticated — setting 'ready'");
           setStatus("ready");
         }
-      } catch {
+      } catch (err) {
+        console.error("[InvitePage] Validation error:", err);
         setStatus("invalid");
       }
     };
@@ -55,10 +72,12 @@ export default function InvitePage() {
   }, [code, firebaseUser, authLoading]);
 
   const handleJoin = async () => {
+    console.log("[InvitePage] handleJoin called", { firebaseUser: firebaseUser?.uid, householdId });
     if (!firebaseUser || !householdId) return;
     setJoining(true);
     try {
       const result = await joinHousehold(householdId, firebaseUser.uid);
+      console.log("[InvitePage] joinHousehold result:", result);
       if (result === "success") {
         const updatedProfile = await getUserProfile(firebaseUser.uid);
         if (updatedProfile) setUser(updatedProfile);

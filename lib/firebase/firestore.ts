@@ -91,6 +91,16 @@ const _createHouseholdImpl = async (uid: string): Promise<string> => {
     invite_expires_at: expiresAt,
   });
 
+  // Write invite code lookup document so non-members can find this household
+  try {
+    await setDoc(doc(db, "invite_codes", inviteCode), {
+      household_id: householdRef.id,
+      expires_at: expiresAt,
+    });
+  } catch (err) {
+    console.error("[createHousehold] Failed to write invite_codes doc (non-fatal):", err);
+  }
+
   // Step 2: Update user's household_id IMMEDIATELY after household doc is created.
   // This ensures the user always has a household_id even if seeding defaults fails.
   await updateDoc(doc(db, "users", uid), {
@@ -141,26 +151,83 @@ export const getHouseholdByInviteCode = async (
   code: string
 ): Promise<{ id: string } | null> => {
   const trimmedCode = code.trim();
-  if (!trimmedCode) return null;
-  const q = query(
-    collection(db, "households"),
-    where("invite_code", "==", trimmedCode)
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as { id: string };
+  console.log("[InviteDebug] getHouseholdByInviteCode called", {
+    rawCode: JSON.stringify(code),
+    trimmedCode: JSON.stringify(trimmedCode),
+    codeLength: trimmedCode.length,
+  });
+  if (!trimmedCode) {
+    console.log("[InviteDebug] Code is empty after trim, returning null");
+    return null;
+  }
+
+  // Strategy: Look up invite code via the invite_codes collection (document ID = code).
+  // This avoids a collection query on households which gets blocked by security rules
+  // when the user isn't a member of any household.
+  try {
+    const inviteSnap = await getDoc(doc(db, "invite_codes", trimmedCode));
+    console.log("[InviteDebug] invite_codes lookup", {
+      exists: inviteSnap.exists(),
+      data: inviteSnap.exists() ? inviteSnap.data() : null,
+    });
+    if (inviteSnap.exists()) {
+      const householdId = inviteSnap.data()?.household_id;
+      if (householdId) {
+        console.log("[InviteDebug] Found household via invite_codes:", householdId);
+        return { id: householdId };
+      }
+    }
+  } catch (err) {
+    console.error("[InviteDebug] invite_codes lookup failed:", err);
+  }
+
+  // Fallback: try the old collection query (works if user has permission)
+  try {
+    const q = query(
+      collection(db, "households"),
+      where("invite_code", "==", trimmedCode)
+    );
+    const snap = await getDocs(q);
+    console.log("[InviteDebug] Fallback query result", {
+      empty: snap.empty,
+      size: snap.size,
+    });
+    if (snap.empty) return null;
+    const result = { id: snap.docs[0].id, ...snap.docs[0].data() } as { id: string };
+    console.log("[InviteDebug] Found household via fallback:", snap.docs[0].id);
+    return result;
+  } catch (err) {
+    console.error("[InviteDebug] Fallback query also FAILED:", err);
+    return null;
+  }
 };
 
 export const joinHousehold = async (
   householdId: string,
   uid: string
 ): Promise<"success" | "full" | "expired"> => {
+  console.log("[InviteDebug] joinHousehold called", { householdId, uid });
   const snap = await getDoc(doc(db, "households", householdId));
-  if (!snap.exists()) return "expired";
+  if (!snap.exists()) {
+    console.log("[InviteDebug] Household does not exist:", householdId);
+    return "expired";
+  }
 
   const data = snap.data();
-  if (!data) return "expired";
+  if (!data) {
+    console.log("[InviteDebug] Household data is null");
+    return "expired";
+  }
   const now = Timestamp.now();
+
+  console.log("[InviteDebug] joinHousehold validation", {
+    invite_expires_at: data.invite_expires_at?.toDate?.()?.toISOString(),
+    now: now.toDate().toISOString(),
+    isExpired: !data.invite_expires_at || data.invite_expires_at.toMillis() < now.toMillis(),
+    members: data.members,
+    memberCount: data.members?.length,
+    isFull: !data.members || data.members.length >= 2,
+  });
 
   if (!data.invite_expires_at || data.invite_expires_at.toMillis() < now.toMillis()) return "expired";
   if (!data.members || data.members.length >= 2) return "full";
@@ -174,6 +241,7 @@ export const joinHousehold = async (
     household_ids: arrayUnion(householdId),
   });
 
+  console.log("[InviteDebug] joinHousehold SUCCESS");
   return "success";
 };
 
@@ -182,10 +250,36 @@ export const refreshInviteCode = async (householdId: string): Promise<string> =>
   const expiresAt = Timestamp.fromDate(
     new Date(Date.now() + 48 * 60 * 60 * 1000)
   );
+  console.log("[InviteDebug] refreshInviteCode", {
+    householdId,
+    newCode,
+    expiresAt: expiresAt.toDate().toISOString(),
+  });
+
+  // Delete old invite_code document if it exists
+  const householdSnap = await getDoc(doc(db, "households", householdId));
+  const oldCode = householdSnap.exists() ? householdSnap.data()?.invite_code : null;
+
   await updateDoc(doc(db, "households", householdId), {
     invite_code: newCode,
     invite_expires_at: expiresAt,
   });
+
+  // Write the invite code lookup document (ID = code, data = household_id)
+  // This allows non-members to look up the household by invite code
+  try {
+    if (oldCode) {
+      await deleteDoc(doc(db, "invite_codes", oldCode));
+    }
+    await setDoc(doc(db, "invite_codes", newCode), {
+      household_id: householdId,
+      expires_at: expiresAt,
+    });
+    console.log("[InviteDebug] refreshInviteCode SUCCESS — saved to both households and invite_codes");
+  } catch (err) {
+    console.error("[InviteDebug] Failed to write invite_codes doc (non-fatal):", err);
+  }
+
   return newCode;
 };
 
