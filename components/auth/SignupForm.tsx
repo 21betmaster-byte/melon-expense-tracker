@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signUpWithEmail, signInWithGoogle } from "@/lib/firebase/auth";
@@ -21,6 +21,8 @@ import { toast } from "sonner";
 
 export const SignupForm = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/dashboard";
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const form = useForm<SignUpValues>({
@@ -33,7 +35,7 @@ export const SignupForm = () => {
       toast.loading("Creating your account...", { id: "signup" });
       await signUpWithEmail(values.email, values.password, values.name);
       toast.success("Account created! Taking you to your dashboard.", { id: "signup" });
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (error: unknown) {
       const code = (error as { code?: string }).code;
       toast.error(
@@ -55,7 +57,7 @@ export const SignupForm = () => {
       toast.loading("Signing in with Google...", { id: "google-signin" });
       await signInWithGoogle();
       toast.success("Signed in! Taking you to your dashboard.", { id: "google-signin" });
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (error: unknown) {
       toast.dismiss("google-signin");
       const code = (error as { code?: string }).code;

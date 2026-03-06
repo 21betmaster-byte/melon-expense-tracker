@@ -140,9 +140,11 @@ export const getHousehold = async (householdId: string): Promise<Household | nul
 export const getHouseholdByInviteCode = async (
   code: string
 ): Promise<{ id: string } | null> => {
+  const trimmedCode = code.trim();
+  if (!trimmedCode) return null;
   const q = query(
     collection(db, "households"),
-    where("invite_code", "==", code)
+    where("invite_code", "==", trimmedCode)
   );
   const snap = await getDocs(q);
   if (snap.empty) return null;
@@ -156,11 +158,12 @@ export const joinHousehold = async (
   const snap = await getDoc(doc(db, "households", householdId));
   if (!snap.exists()) return "expired";
 
-  const data = snap.data() as Household;
+  const data = snap.data();
+  if (!data) return "expired";
   const now = Timestamp.now();
 
-  if (data.invite_expires_at.toMillis() < now.toMillis()) return "expired";
-  if (data.members.length >= 2) return "full";
+  if (!data.invite_expires_at || data.invite_expires_at.toMillis() < now.toMillis()) return "expired";
+  if (!data.members || data.members.length >= 2) return "full";
 
   await updateDoc(doc(db, "households", householdId), {
     members: arrayUnion(uid),

@@ -53,9 +53,17 @@ export function formatCountdown(expiresAt: Timestamp): CountdownResult {
 /**
  * Builds the full invite URL from an invite code.
  * Centralizes the pattern used by InvitePartner + CreateHouseholdCard.
+ *
+ * Uses window.location.origin (the actual browser URL) as the primary
+ * source — this automatically works in dev (localhost:3000) and production
+ * (expensetracker-kappa-six.vercel.app) without any env var configuration.
+ * Falls back to NEXT_PUBLIC_APP_URL for SSR contexts where window is unavailable.
  */
 export function getInviteUrl(inviteCode: string): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_APP_URL?.trim() ?? "https://expensetracker-kappa-six.vercel.app");
   return `${appUrl}/invite/${inviteCode}`;
 }
 

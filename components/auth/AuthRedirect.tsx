@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getRedirectResult } from "firebase/auth";
 import { auth } from "@/lib/firebase/config";
 import { MelonLoader } from "@/components/ui/MelonLoader";
@@ -12,12 +12,15 @@ import { MelonLoader } from "@/components/ui/MelonLoader";
  * Handles the signInWithRedirect fallback flow:
  * When a user completes Google sign-in via redirect (mobile/PWA),
  * the browser navigates back to the login page. This component
- * detects the redirect result and sends them to /dashboard.
+ * detects the redirect result and sends them to the appropriate
+ * destination (respects ?redirect= query param for invite flow).
  *
  * For normal visits to login/signup, the children render immediately.
  */
 export const AuthRedirect = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/dashboard";
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -26,11 +29,11 @@ export const AuthRedirect = ({ children }: { children: React.ReactNode }) => {
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) {
-          // User just completed a redirect sign-in — go to dashboard
+          // User just completed a redirect sign-in — go to redirect target
           if (typeof window !== "undefined") {
             localStorage.setItem("onboarding_completed", "true");
           }
-          router.replace("/dashboard");
+          router.replace(redirectTo);
         } else {
           // No redirect result — show the login/signup form normally
           setChecking(false);
@@ -44,7 +47,7 @@ export const AuthRedirect = ({ children }: { children: React.ReactNode }) => {
     // Safety timeout: don't block the page for more than 2 seconds
     const timeout = setTimeout(() => setChecking(false), 2000);
     return () => clearTimeout(timeout);
-  }, [router]);
+  }, [router, redirectTo]);
 
   if (checking) {
     return <MelonLoader message="Loading..." />;

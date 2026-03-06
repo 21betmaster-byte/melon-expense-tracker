@@ -16,7 +16,8 @@ import Link from "next/link";
 type Status = "loading" | "ready" | "invalid" | "full" | "expired" | "success" | "no-auth";
 
 export default function InvitePage() {
-  const { code } = useParams<{ code: string }>();
+  const params = useParams<{ code: string }>();
+  const code = params.code?.trim();
   const router = useRouter();
   const { firebaseUser, user, authLoading, setUser } = useAppStore();
   const [status, setStatus] = useState<Status>("loading");

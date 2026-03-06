@@ -75,7 +75,7 @@ export const useHousehold = () => {
       // Background Firestore update for migrated categories (fire-and-forget)
       const unmigrated = categories.filter((cat) => !cat.group_id);
       if (unmigrated.length > 0 && defaultGroup) {
-        Promise.all(
+        void Promise.all(
           unmigrated.map((cat) =>
             updateDoc(
               doc(db, "households", user.household_id!, "categories", cat.id),

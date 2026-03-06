@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,6 +27,8 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export const LoginForm = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/dashboard";
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const form = useForm<LoginValues>({
@@ -37,7 +39,7 @@ export const LoginForm = () => {
   const onSubmit = async (values: LoginValues) => {
     try {
       await signInWithEmail(values.email, values.password);
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (error: unknown) {
       const code = (error as { code?: string }).code;
       toast.error(
@@ -54,7 +56,7 @@ export const LoginForm = () => {
       toast.loading("Signing in with Google...", { id: "google-signin" });
       await signInWithGoogle();
       toast.success("Signed in! Taking you to your dashboard.", { id: "google-signin" });
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (error: unknown) {
       toast.dismiss("google-signin");
       const code = (error as { code?: string }).code;
