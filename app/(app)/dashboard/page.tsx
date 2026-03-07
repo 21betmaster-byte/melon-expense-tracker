@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { SettlementCard } from "@/components/dashboard/SettlementCard";
 import { QuickStats } from "@/components/dashboard/QuickStats";
+import { HomeCarousel } from "@/components/dashboard/HomeCarousel";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
 import { AddExpenseDialog } from "@/components/expenses/AddExpenseDialog";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,9 @@ export default function DashboardPage() {
           Add
         </Button>
       </div>
+
+      {/* Carousel */}
+      <HomeCarousel />
 
       {/* Settlement */}
       <SettlementCard />

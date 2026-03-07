@@ -16,7 +16,6 @@ export interface Household {
   members: string[];
   invite_code: string;
   invite_expires_at: Timestamp;
-  invite_email?: string; // partner's email stored for display
 }
 
 export interface ExpenseGroup {
