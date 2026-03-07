@@ -22,9 +22,11 @@ import { requireAuth, requireAuthOrSkip } from "./helpers/auth-guard";
  *   8    | Tour overlay does NOT render opaque wall when targets missing
  *   9    | Push notification toggle shows error for missing config
  *  10    | Category dropdown populates in expense form
+ *  11    | Stale activeGroup from old household blocks expenses after invite join
+ *  12    | Partner can't see groups/expenses after joining household via invite
  */
 
-test.describe("Suite I: Bug Regression (I1–I22)", () => {
+test.describe("Suite I: Bug Regression (I1–I28)", () => {
   // ─── Bug 1: Google Sign-In specific error messages ─────────────────────
 
   test("I1: Login page has Google sign-in button", async ({ page }) => {
@@ -348,5 +350,295 @@ test.describe("Suite I: Bug Regression (I1–I22)", () => {
 
     // At least one of these should be visible (never stuck in loading)
     expect(hasCopy + hasRetry + hasMembers).toBeGreaterThan(0);
+  });
+
+  // ─── Bug 11: Stale activeGroup after joining new household ────────
+
+  test("I23: Stale activeGroup from old household is replaced on reload", async ({ page }) => {
+    await requireAuth(page, "/dashboard");
+    await page.waitForTimeout(3000);
+
+    // Verify the group switcher shows a valid group initially
+    const switcher = page.locator('[data-testid="group-switcher"]');
+    await expect(switcher).toBeVisible({ timeout: 10_000 });
+    const originalGroupName = await switcher.textContent();
+    expect(originalGroupName).toBeTruthy();
+
+    // Inject a stale activeGroup into localStorage (simulates joining a new
+    // household while activeGroup from the old household is still persisted).
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("melon-store");
+      if (!raw) return;
+      const store = JSON.parse(raw);
+      // Replace activeGroup with a fake one that doesn't belong to any current group
+      store.state.activeGroup = {
+        id: "stale-group-from-old-household",
+        name: "Old Household Group",
+        is_default: true,
+      };
+      localStorage.setItem("melon-store", JSON.stringify(store));
+    });
+
+    // Reload — useHousehold should detect the stale group and reset it
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+
+    // The group switcher should show a valid group from the CURRENT household,
+    // NOT the stale "Old Household Group" or undefined/null
+    await expect(switcher).toBeVisible({ timeout: 10_000 });
+    const updatedGroupName = await switcher.textContent();
+    expect(updatedGroupName).toBeTruthy();
+    expect(updatedGroupName).not.toContain("Old Household Group");
+    expect(updatedGroupName).not.toContain("undefined");
+    expect(updatedGroupName).not.toContain("null");
+  });
+
+  test("I24: Dashboard loads expenses after stale activeGroup is corrected", async ({ page }) => {
+    await requireAuth(page, "/dashboard");
+    await page.waitForTimeout(3000);
+
+    // Inject stale activeGroup
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("melon-store");
+      if (!raw) return;
+      const store = JSON.parse(raw);
+      store.state.activeGroup = {
+        id: "stale-group-from-old-household",
+        name: "Old Household Group",
+        is_default: true,
+      };
+      localStorage.setItem("melon-store", JSON.stringify(store));
+    });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+
+    // After stale group is corrected, the settlement card should render
+    // (it always shows for valid groups, even with $0 balance)
+    const settlementCard = page.locator('[data-testid="settlement-card"]');
+    await expect(settlementCard).toBeVisible({ timeout: 10_000 });
+
+    // The bottom nav should be functional (app is not stuck)
+    const bottomNav = page.locator('[data-testid="bottom-nav"]');
+    await expect(bottomNav).toBeVisible({ timeout: 5_000 });
+  });
+
+  // ─── Bug 12: Partner can't see groups/expenses after joining household ──
+
+  test("I25: Full stale household data is replaced after household switch", async ({ page }) => {
+    await requireAuth(page, "/dashboard");
+    await page.waitForTimeout(3000);
+
+    // Inject comprehensive stale data simulating a partner who had their
+    // own auto-created household before joining via invite link.
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("melon-store");
+      if (!raw) return;
+      const store = JSON.parse(raw);
+      store.state.household = {
+        id: "stale-old-household-id",
+        currency: "USD",
+        members: ["old-user-id"],
+      };
+      store.state.groups = [
+        { id: "stale-group-1", name: "Old Default", is_default: true },
+        { id: "stale-group-2", name: "Old Travel", is_default: false },
+      ];
+      store.state.activeGroup = {
+        id: "stale-group-1",
+        name: "Old Default",
+        is_default: true,
+      };
+      store.state.expenses = [];
+      store.state.categories = [];
+      store.state.allCategories = [];
+      store.state.settlements = [];
+      localStorage.setItem("melon-store", JSON.stringify(store));
+    });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+
+    // GroupSwitcher should show a group from the CURRENT household
+    const switcher = page.locator('[data-testid="group-switcher"]');
+    await expect(switcher).toBeVisible({ timeout: 10_000 });
+    const groupName = await switcher.textContent();
+    expect(groupName).toBeTruthy();
+    expect(groupName).not.toContain("Old Default");
+    expect(groupName).not.toContain("Old Travel");
+
+    // Settlement card renders (proves activeGroup is valid)
+    const settlementCard = page.locator('[data-testid="settlement-card"]');
+    await expect(settlementCard).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("I26: GroupSwitcher dropdown lists current household groups after stale data", async ({ page }) => {
+    await requireAuth(page, "/dashboard");
+    await page.waitForTimeout(3000);
+
+    // Capture the real groups before injecting stale data
+    const realGroups = await page.evaluate(() => {
+      const raw = localStorage.getItem("melon-store");
+      if (!raw) return [];
+      const store = JSON.parse(raw);
+      return (store.state.groups || []).map((g: { name: string }) => g.name);
+    });
+
+    // Inject stale groups from a different household
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("melon-store");
+      if (!raw) return;
+      const store = JSON.parse(raw);
+      store.state.groups = [
+        { id: "fake-group-x", name: "Partner Old Group", is_default: true },
+      ];
+      store.state.activeGroup = {
+        id: "fake-group-x",
+        name: "Partner Old Group",
+        is_default: true,
+      };
+      localStorage.setItem("melon-store", JSON.stringify(store));
+    });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+
+    // Open the GroupSwitcher dropdown
+    const switcher = page.locator('[data-testid="group-switcher"]');
+    await expect(switcher).toBeVisible({ timeout: 10_000 });
+    await switcher.click();
+    await page.waitForTimeout(500);
+
+    // The dropdown should NOT contain the stale group
+    const dropdownContent = page.locator('[role="menu"]');
+    await expect(dropdownContent).toBeVisible({ timeout: 5_000 });
+    const dropdownText = await dropdownContent.textContent();
+    expect(dropdownText).not.toContain("Partner Old Group");
+
+    // It should contain at least one of the real groups
+    if (realGroups.length > 0) {
+      const hasRealGroup = realGroups.some((name: string) =>
+        dropdownText?.includes(name)
+      );
+      expect(hasRealGroup).toBe(true);
+    }
+  });
+
+  test("I27: ExpenseList renders after stale household data is cleared", async ({ page }) => {
+    await requireAuth(page, "/dashboard");
+    await page.waitForTimeout(3000);
+
+    // Inject stale data from a different household
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("melon-store");
+      if (!raw) return;
+      const store = JSON.parse(raw);
+      store.state.activeGroup = {
+        id: "stale-hh-group",
+        name: "Stale Group",
+        is_default: true,
+      };
+      store.state.groups = [
+        { id: "stale-hh-group", name: "Stale Group", is_default: true },
+      ];
+      store.state.household = { id: "stale-hh-id", currency: "EUR", members: [] };
+      localStorage.setItem("melon-store", JSON.stringify(store));
+    });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+
+    // ExpenseList should NOT be stuck in loading skeleton state.
+    // It should show either expense cards or the "No expenses yet" message.
+    const loadingSkeleton = page.locator(".animate-pulse");
+    const skeletonCount = await loadingSkeleton.count();
+
+    const noExpenses = page.locator('[data-testid="expense-no-results"]');
+    const expenseCards = page.locator('[data-testid="expense-card"]');
+
+    const hasNoExpensesMsg = (await noExpenses.count()) > 0;
+    const hasExpenseCards = (await expenseCards.count()) > 0;
+
+    // Either expenses loaded or empty message shows — not stuck loading
+    if (skeletonCount > 0) {
+      // If skeleton is still visible, it should disappear within a few more seconds
+      await expect(loadingSkeleton.first()).not.toBeVisible({ timeout: 10_000 });
+    }
+    expect(hasNoExpensesMsg || hasExpenseCards).toBe(true);
+  });
+
+  test("I28: Dashboard fully functional after complete stale household replacement", async ({ page }) => {
+    await requireAuth(page, "/dashboard");
+    await page.waitForTimeout(3000);
+
+    // Inject the most comprehensive stale state: household, groups,
+    // activeGroup, expenses, categories, settlements, members
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("melon-store");
+      if (!raw) return;
+      const store = JSON.parse(raw);
+      store.state.household = {
+        id: "completely-wrong-household",
+        currency: "GBP",
+        members: ["stranger-uid"],
+      };
+      store.state.groups = [
+        { id: "wrong-g1", name: "Wrong Group 1", is_default: true },
+        { id: "wrong-g2", name: "Wrong Group 2", is_default: false },
+      ];
+      store.state.activeGroup = {
+        id: "wrong-g1",
+        name: "Wrong Group 1",
+        is_default: true,
+      };
+      store.state.expenses = [
+        {
+          id: "fake-expense",
+          amount: 9999,
+          description: "Fake stale expense",
+          group_id: "wrong-g1",
+          category_id: "fake-cat",
+          expense_type: "solo",
+          paid_by_user_id: "stranger-uid",
+          split_ratio: 100,
+          source: "manual",
+          created_by: "stranger-uid",
+        },
+      ];
+      store.state.categories = [
+        { id: "fake-cat", name: "Fake Category", icon: "tag", group_id: "wrong-g1" },
+      ];
+      store.state.allCategories = store.state.categories;
+      store.state.settlements = [];
+      store.state.members = [{ uid: "stranger-uid", name: "Stranger", email: "s@x.com" }];
+      localStorage.setItem("melon-store", JSON.stringify(store));
+    });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+
+    // 1. GroupSwitcher shows a valid group (not "Wrong Group 1/2")
+    const switcher = page.locator('[data-testid="group-switcher"]');
+    await expect(switcher).toBeVisible({ timeout: 10_000 });
+    const groupText = await switcher.textContent();
+    expect(groupText).not.toContain("Wrong Group");
+
+    // 2. Settlement card renders (active group is valid)
+    const settlementCard = page.locator('[data-testid="settlement-card"]');
+    await expect(settlementCard).toBeVisible({ timeout: 10_000 });
+
+    // 3. The fake stale expense should NOT appear
+    const fakeExpense = page.getByText("Fake stale expense");
+    const fakeCount = await fakeExpense.count();
+    expect(fakeCount).toBe(0);
+
+    // 4. Bottom nav is functional (app is not stuck)
+    const bottomNav = page.locator('[data-testid="bottom-nav"]');
+    await expect(bottomNav).toBeVisible({ timeout: 5_000 });
+
+    // 5. Add expense button is interactable
+    const addBtn = page.locator('[data-testid="add-expense-btn"]');
+    await expect(addBtn).toBeVisible({ timeout: 5_000 });
+    await expect(addBtn).toBeEnabled();
   });
 });

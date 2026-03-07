@@ -88,8 +88,11 @@ export const useHousehold = () => {
       // Set all categories with group_id populated (F-09)
       setAllCategories(migratedCategories);
 
-      // Set default active group if not yet set (triggers category filtering)
-      if (!activeGroup && groups.length > 0) {
+      // Set active group if not yet set OR if current activeGroup doesn't
+      // belong to this household (e.g. user joined a new household via invite
+      // but activeGroup is stale from their previous household in localStorage).
+      const activeGroupInHousehold = activeGroup && groups.some((g) => g.id === activeGroup.id);
+      if ((!activeGroup || !activeGroupInHousehold) && groups.length > 0) {
         setActiveGroup(defaultGroup);
       }
 
@@ -121,7 +124,8 @@ export const useHousehold = () => {
       setHouseholdLoading(false);
     };
 
-    load().catch(() => {
+    load().catch((err) => {
+      console.error("[useHousehold] Failed to load household data:", err);
       setHouseholdLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
