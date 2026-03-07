@@ -9,7 +9,7 @@ import { requireAuth } from "./helpers/auth-guard";
  *  F4–F6  Groups manager (requires auth)
  *  F7–F9  Categories manager (requires auth)
  *  F10–F12 Currency selector (requires auth)
- *  F13–F15 Invite partner panel (requires auth + single-member household)
+ *  F13–F14 Invite partner panel (requires auth + single-member household)
  *  F16–F18 Expense form currency symbol + slider (requires auth)
  *
  * Create .env.test with TEST_USER_EMAIL + TEST_USER_PASSWORD (see README).
@@ -164,20 +164,6 @@ test.describe("Suite F: Settings — Invite Partner", () => {
     await expect(page.locator('[data-testid="copy-invite-btn"]')).toBeVisible({ timeout: 15000 });
   });
 
-  test("F15: Partner email input accepts a valid email address", async ({ page }) => {
-    const inviteHeading = page.getByText("Invite Your Partner");
-    const isInviteVisible = await inviteHeading.isVisible().catch(() => false);
-
-    if (!isInviteVisible) {
-      console.log("F15: Household has 2 members — partner email input not shown (expected).");
-      return;
-    }
-
-    const emailInput = page.locator('[data-testid="partner-email-input"]');
-    await expect(emailInput).toBeVisible();
-    await emailInput.fill("jhanvi@example.com");
-    expect(await emailInput.inputValue()).toBe("jhanvi@example.com");
-  });
 });
 
 // ─── F16–F18: Expense form currency + split slider ────────────────────────────

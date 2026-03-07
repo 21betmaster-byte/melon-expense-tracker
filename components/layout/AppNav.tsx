@@ -1,30 +1,18 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Receipt,
   BarChart2,
   Settings,
-  LogOut,
   Plus,
 } from "lucide-react";
 import { GroupSwitcher } from "./GroupSwitcher";
-import { logOut } from "@/lib/firebase/auth";
 import { useAppStore } from "@/store/useAppStore";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { QuickAddDialog } from "@/components/expenses/QuickAddDialog";
 import { AddExpenseDialog } from "@/components/expenses/AddExpenseDialog";
 
@@ -41,16 +29,11 @@ const NAV_RIGHT = [
 export const AppNav = () => {
   const pathname = usePathname();
   const router = useRouter();
-  const { reset } = useAppStore();
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const { user } = useAppStore();
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [fullFormOpen, setFullFormOpen] = useState(false);
 
-  const handleLogout = async () => {
-    await logOut();
-    reset();
-    router.push("/login");
-  };
+  const initial = user?.name?.charAt(0)?.toUpperCase() || "U";
 
   return (
     <>
@@ -60,16 +43,14 @@ export const AppNav = () => {
           <span className="font-bold text-blue-400 text-lg">Melon</span>
           <GroupSwitcher />
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowLogoutDialog(true)}
-          className="text-slate-400 hover:text-slate-100"
-          aria-label="Log out"
-          data-testid="logout-btn"
+        <button
+          onClick={() => router.push("/profile")}
+          className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold hover:bg-blue-500 transition-colors"
+          aria-label="Profile"
+          data-testid="profile-avatar-btn"
         >
-          <LogOut className="w-4 h-4" />
-        </Button>
+          {initial}
+        </button>
       </header>
 
       {/* Bottom Tab Bar (mobile-first) with center FAB */}
@@ -136,28 +117,6 @@ export const AppNav = () => {
         onOpenChange={setFullFormOpen}
       />
 
-      {/* Logout Confirmation Dialog */}
-      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-        <AlertDialogContent data-testid="logout-confirm-dialog">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign out?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to sign out of your account?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="logout-cancel-btn">
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleLogout}
-              data-testid="logout-confirm-btn"
-            >
-              Sign out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 };

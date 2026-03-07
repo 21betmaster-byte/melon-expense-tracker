@@ -12,51 +12,51 @@ import { requireAuth } from "./helpers/auth-guard";
  * destructive leave/delete operations to preserve the test user's household.
  */
 
-// ─── H215–H219: Logout Confirmation ─────────────────────────────────────────
+// ─── H215–H219: Logout Confirmation (now on /profile page) ──────────────────
 
 test.describe("Suite H: Offboarding — Logout Confirmation", () => {
   test.beforeEach(async ({ page }) => {
-    await requireAuth(page, "/dashboard");
+    await requireAuth(page, "/profile");
   });
 
-  test("H215: Logout button is visible in header", async ({ page }) => {
+  test("H215: Logout button is visible on profile page", async ({ page }) => {
     await expect(
-      page.locator('[data-testid="logout-btn"]')
+      page.locator('[data-testid="profile-logout-btn"]')
     ).toBeVisible({ timeout: 10_000 });
   });
 
   test("H216: Clicking logout opens confirmation dialog", async ({ page }) => {
-    await page.locator('[data-testid="logout-btn"]').click();
+    await page.locator('[data-testid="profile-logout-btn"]').click();
     await expect(
       page.locator('[data-testid="logout-confirm-dialog"]')
     ).toBeVisible({ timeout: 5000 });
   });
 
   test("H217: Cancel button dismisses logout dialog", async ({ page }) => {
-    await page.locator('[data-testid="logout-btn"]').click();
+    await page.locator('[data-testid="profile-logout-btn"]').click();
     const dialog = page.locator('[data-testid="logout-confirm-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    await page.locator('[data-testid="logout-cancel-btn"]').click();
+    await page.locator('[data-testid="profile-logout-cancel-btn"]').click();
     await expect(dialog).toBeHidden({ timeout: 3000 });
 
-    // Should still be on dashboard (not redirected)
-    await expect(page).toHaveURL(/.*\/dashboard/);
+    // Should still be on profile (not redirected)
+    await expect(page).toHaveURL(/.*\/profile/);
   });
 
   test("H218: Confirm logout redirects to /login", async ({ page }) => {
-    await page.locator('[data-testid="logout-btn"]').click();
+    await page.locator('[data-testid="profile-logout-btn"]').click();
     await expect(
       page.locator('[data-testid="logout-confirm-dialog"]')
     ).toBeVisible({ timeout: 5000 });
 
-    await page.locator('[data-testid="logout-confirm-btn"]').click();
+    await page.locator('[data-testid="profile-logout-confirm-btn"]').click();
     await page.waitForURL(/.*\/login/, { timeout: 10_000 });
     await expect(page).toHaveURL(/.*\/login/);
   });
 
   test("H219: Escape key dismisses logout dialog", async ({ page }) => {
-    await page.locator('[data-testid="logout-btn"]').click();
+    await page.locator('[data-testid="profile-logout-btn"]').click();
     const dialog = page.locator('[data-testid="logout-confirm-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
