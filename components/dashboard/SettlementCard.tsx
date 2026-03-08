@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useSettlement } from "@/hooks/useSettlement";
 import { useAppStore } from "@/store/useAppStore";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
-import { recordSettlement } from "@/lib/firebase/firestore";
+import { addExpense } from "@/lib/firebase/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,13 +17,13 @@ import {
 import { CheckCircle, ArrowRight, Handshake, History } from "lucide-react";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
-import type { SettlementEvent } from "@/types";
+import type { Expense } from "@/types";
 import { sendPushNotification } from "@/lib/notifications/sendPushNotification";
 import { buildSettlementPayload } from "@/lib/notifications/buildNotificationPayload";
 
 export const SettlementCard = () => {
   const settlement = useSettlement();
-  const { members, household, user, settlements, activeGroup, addSettlement } = useAppStore();
+  const { members, household, user, expenses, activeGroup, addPendingExpense, resolvePendingExpense } = useAppStore();
   const currency = household?.currency ?? "INR";
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -34,34 +34,46 @@ export const SettlementCard = () => {
     return member ? (member.uid === user?.uid ? "You" : member.name) : "Partner";
   };
 
-  // Filter settlements for the active group
-  const groupSettlements = activeGroup
-    ? settlements.filter((s) => s.group_id === activeGroup.id)
+  // Settlement history: show settlement-type expenses for the active group
+  const settlementExpenses = activeGroup
+    ? expenses.filter((e) => e.expense_type === "settlement")
     : [];
 
   const [showAllHistory, setShowAllHistory] = useState(false);
 
-  // Show only last 5 settlement events, or all if expanded
   const recentSettlements = showAllHistory
-    ? groupSettlements
-    : groupSettlements.slice(0, 5);
+    ? settlementExpenses
+    : settlementExpenses.slice(0, 5);
 
   const handleMarkSettled = async () => {
-    if (!household || !settlement.owedBy || !settlement.owedTo || !activeGroup) return;
+    if (!household || !user || !settlement.owedBy || !settlement.owedTo || !activeGroup) return;
 
     setIsRecording(true);
 
-    const event: Omit<SettlementEvent, "id"> = {
+    const now = Timestamp.now();
+    const localId = `local-${Date.now()}`;
+
+    // Build settlement as a real expense (split_ratio 0 = payer covers 0%, full amount reduces debt)
+    const expenseData: Omit<Expense, "id" | "_pending" | "_local_id"> = {
       amount: settlement.amount,
-      paid_by: settlement.owedBy,
-      paid_to: settlement.owedTo,
-      settled_at: Timestamp.now(),
+      description: "Settlement",
       group_id: activeGroup.id,
+      category_id: "",
+      expense_type: "settlement",
+      paid_by_user_id: settlement.owedBy,
+      split_ratio: 0,
+      date: now,
+      source: "manual",
+      created_by: user.uid,
     };
 
-    // Optimistic update: add to store immediately, close dialog, show toast
-    const tempId = `temp-${Date.now()}`;
-    addSettlement({ ...event, id: tempId });
+    // Optimistic update: add pending expense to store immediately
+    addPendingExpense({
+      ...expenseData,
+      id: localId,
+      _pending: true,
+      _local_id: localId,
+    });
 
     toast.success(
       `Settlement of ${formatCurrency(settlement.amount, currency)} recorded`
@@ -69,26 +81,25 @@ export const SettlementCard = () => {
     setConfirmOpen(false);
     setIsRecording(false);
 
-    // Persist to Firestore in background (may fail if security rules not configured)
+    // Persist to Firestore
     try {
-      await recordSettlement(household.id, event);
+      const realId = await addExpense(household.id, expenseData);
+      resolvePendingExpense(localId, realId);
+
       // Notify partner about the settlement (fire-and-forget)
-      if (user) {
-        sendPushNotification({
-          householdId: household.id,
-          senderUid: user.uid,
-          type: "settlement_recorded",
-          ...buildSettlementPayload({
-            senderName: user.name,
-            amount: settlement.amount,
-            currency,
-          }),
-        });
-      }
-    } catch {
-      // Firestore write failed (e.g., security rules not yet configured for settlements subcollection).
-      // The optimistic update remains in the store for this session.
-      console.warn("Failed to persist settlement to Firestore — optimistic update retained");
+      sendPushNotification({
+        householdId: household.id,
+        senderUid: user.uid,
+        type: "settlement_recorded",
+        ...buildSettlementPayload({
+          senderName: user.name,
+          amount: settlement.amount,
+          currency,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to persist settlement expense:", err);
+      toast.error("Settlement failed to save. Please try again.");
     }
   };
 
@@ -160,36 +171,42 @@ export const SettlementCard = () => {
             <div
               className={`space-y-2 ${showAllHistory ? "max-h-[300px] overflow-y-auto" : ""}`}
             >
-              {recentSettlements.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between text-sm"
-                  data-testid="settlement-history-item"
-                >
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span>{getDisplayName(s.paid_by)}</span>
-                    <ArrowRight className="w-3 h-3 text-slate-600" />
-                    <span>{getDisplayName(s.paid_to)}</span>
+              {recentSettlements.map((s) => {
+                const paidByName = getDisplayName(s.paid_by_user_id);
+                const paidToName = getDisplayName(
+                  members.find((m) => m.uid !== s.paid_by_user_id)?.uid ?? null
+                );
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between text-sm"
+                    data-testid="settlement-history-item"
+                  >
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <span>{paidByName}</span>
+                      <ArrowRight className="w-3 h-3 text-slate-600" />
+                      <span>{paidToName}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-green-400 font-medium">
+                        {formatCurrency(s.amount, currency)}
+                      </span>
+                      <span className="text-xs text-slate-600 ml-2">
+                        {formatDate(s.date)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-green-400 font-medium">
-                      {formatCurrency(s.amount, currency)}
-                    </span>
-                    <span className="text-xs text-slate-600 ml-2">
-                      {formatDate(s.settled_at)}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-            {groupSettlements.length > 5 && (
+            {settlementExpenses.length > 5 && (
               <button
                 type="button"
                 onClick={() => setShowAllHistory(!showAllHistory)}
                 className="text-xs text-blue-400 hover:text-blue-300 mt-2"
                 data-testid="settlement-show-all-btn"
               >
-                {showAllHistory ? "Show less" : `View all (${groupSettlements.length})`}
+                {showAllHistory ? "Show less" : `View all (${settlementExpenses.length})`}
               </button>
             )}
           </div>

@@ -322,9 +322,15 @@ test.describe("Suite H: Settlement History", () => {
   test("H213: Multiple settlements accumulate in history", async ({
     page,
   }) => {
-    // Get initial history count
-    const historyItems = page.locator('[data-testid="settlement-history-item"]');
-    const initialCount = await historyItems.count();
+    // Get total settlement expense count from the store (not capped by UI limit)
+    const initialTotal = await page.evaluate(() => {
+      const store = (window as unknown as Record<string, any>).__zustand_store;
+      if (!store) return 0;
+      const state = store.getState();
+      return (state.expenses || []).filter(
+        (e: any) => e.expense_type === "settlement"
+      ).length;
+    });
 
     // Ensure non-zero balance and settle
     await ensureMarkSettledVisible(page);
@@ -335,9 +341,16 @@ test.describe("Suite H: Settlement History", () => {
     await confirmBtn.click();
     await page.waitForTimeout(3000);
 
-    // Check that history count increased
-    const newCount = await historyItems.count();
-    expect(newCount).toBeGreaterThan(initialCount);
+    // Check that total settlement expense count increased (store level, not UI cap)
+    const newTotal = await page.evaluate(() => {
+      const store = (window as unknown as Record<string, any>).__zustand_store;
+      if (!store) return 0;
+      const state = store.getState();
+      return (state.expenses || []).filter(
+        (e: any) => e.expense_type === "settlement"
+      ).length;
+    });
+    expect(newTotal).toBeGreaterThan(initialTotal);
   });
 
   test("H214: Settlement dialog is keyboard dismissible (Escape)", async ({

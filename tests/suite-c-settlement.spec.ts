@@ -4,12 +4,20 @@ import { requireAuth } from "./helpers/auth-guard";
 /**
  * Suite C: Settlement Math (Unit Tests) + UI test
  *
- * C1–C6 are pure unit tests — zero auth required, run instantly.
- * C7 is a browser test that requires an authenticated session.
+ * C1–C7 are pure unit tests — zero auth required, run instantly.
+ * C8 is a browser test that requires an authenticated session.
  * Create .env.test with TEST_USER_EMAIL + TEST_USER_PASSWORD (see README).
+ *
+ * The inline calculateSettlement mirrors the ACTUAL production function
+ * from lib/utils/settlement.ts. Settlement expenses use split_ratio: 0
+ * so the full amount reduces the debt.
  */
 
 // ─── Pure settlement logic (no Firebase needed) ───────────────────────────────
+
+interface User {
+  uid: string;
+}
 
 interface Expense {
   id: string;
@@ -19,52 +27,71 @@ interface Expense {
   split_ratio: number;
 }
 
+interface SettlementResult {
+  netBalance: number;
+  owedBy: string | null;
+  owedTo: string | null;
+  amount: number;
+  isSettled: boolean;
+}
+
+/**
+ * Mirrors the production calculateSettlement from lib/utils/settlement.ts.
+ *
+ * Formula for all non-solo expenses (including settlement):
+ *   If A paid: netBalanceA += sign × amount × (1 − split_ratio)
+ *   If B paid: netBalanceA -= sign × amount × (1 − split_ratio)
+ *
+ * Settlement expenses use split_ratio = 0, so the full amount is applied.
+ */
 function calculateSettlement(
   expenses: Expense[],
-  userA: string,
-  userB: string
-): { owes: string; owedBy: string; amount: number; isSettled: boolean } {
-  let balance = 0; // positive = A owes B, negative = B owes A
+  userA: User,
+  userB: User
+): SettlementResult {
+  let netBalanceA = 0;
 
-  for (const e of expenses) {
-    if (e.expense_type === "settlement") {
-      // Settlement reduces debt
-      if (e.paid_by_user_id === userA) {
-        balance -= e.amount;
-      } else if (e.paid_by_user_id === userB) {
-        balance += e.amount;
-      }
-      continue;
-    }
+  for (const expense of expenses) {
+    if (expense.expense_type === "solo") continue;
 
-    if (e.expense_type === "solo") continue;
+    const amount = Math.abs(expense.amount);
+    const isRefund = expense.amount < 0;
+    const sign = isRefund ? -1 : 1;
 
-    // Joint expense
-    const ratio = e.split_ratio; // fraction A pays
-    const aShare = e.amount * ratio;
-    const bShare = e.amount * (1 - ratio);
-
-    if (e.paid_by_user_id === userA) {
-      // A paid — B owes A their share
-      balance -= bShare;
-    } else if (e.paid_by_user_id === userB) {
-      // B paid — A owes B their share
-      balance += aShare;
+    if (expense.paid_by_user_id === userA.uid) {
+      netBalanceA += sign * amount * (1 - expense.split_ratio);
+    } else if (expense.paid_by_user_id === userB.uid) {
+      netBalanceA -= sign * amount * (1 - expense.split_ratio);
     }
   }
 
-  const amount = Math.abs(balance);
-  const isSettled = amount < 0.01;
-  return {
-    owes: balance > 0 ? userA : userB,
-    owedBy: balance > 0 ? userB : userA,
-    amount: parseFloat(amount.toFixed(2)),
-    isSettled,
-  };
+  netBalanceA = Math.round(netBalanceA * 100) / 100;
+
+  if (Math.abs(netBalanceA) < 0.01) {
+    return { netBalance: 0, owedBy: null, owedTo: null, amount: 0, isSettled: true };
+  }
+
+  if (netBalanceA > 0) {
+    return {
+      netBalance: netBalanceA,
+      owedBy: userB.uid,
+      owedTo: userA.uid,
+      amount: netBalanceA,
+      isSettled: false,
+    };
+  } else {
+    return {
+      netBalance: netBalanceA,
+      owedBy: userA.uid,
+      owedTo: userB.uid,
+      amount: Math.abs(netBalanceA),
+      isSettled: false,
+    };
+  }
 }
 
-const userA = "uid-A";
-const userB = "uid-B";
+const userA: User = { uid: "uid-A" };
+const userB: User = { uid: "uid-B" };
 
 function makeJoint(
   id: string,
@@ -81,53 +108,62 @@ function makeJoint(
   };
 }
 
-// ─── C1–C6: Settlement Math Unit Tests ────────────────────────────────────────
+function makeSettlement(
+  id: string,
+  amount: number,
+  paidBy: string
+): Expense {
+  return {
+    id,
+    amount,
+    paid_by_user_id: paidBy,
+    expense_type: "settlement",
+    split_ratio: 0,
+  };
+}
+
+// ─── C1–C7: Settlement Math Unit Tests ────────────────────────────────────────
 
 test.describe("Suite C: Settlement Math (Unit Tests)", () => {
   test("C1: Symmetric 50/50 — B owes A ₹500", () => {
-    const expenses = [makeJoint("e1", 1000, userA, 0.5)];
+    const expenses = [makeJoint("e1", 1000, userA.uid, 0.5)];
     const result = calculateSettlement(expenses, userA, userB);
-    expect(result.owes).toBe(userB);
-    expect(result.owedBy).toBe(userA);
+    expect(result.owedBy).toBe(userB.uid);
+    expect(result.owedTo).toBe(userA.uid);
     expect(result.amount).toBe(500);
     expect(result.isSettled).toBe(false);
   });
 
   test("C2: Asymmetric 80/20 — A owes B ₹400", () => {
-    // B paid ₹1000, A's share is 80% = ₹800, A owes B ₹800
-    // A paid ₹1000, A's share 80% means B owes A ₹200
-    // Net: A owes B 800 - 200 = 600? Let's model correctly:
-    // e1: B paid 1000, ratio=0.8 (A pays 80%) → A owes B 800
-    // e2: A paid 1000, ratio=0.8 (A pays 80%) → B owes A 200
-    // Net balance: A owes B 800 - 200 = 600... but test says 400.
-    // Let's use a simpler single expense: B paid 500, A's share 80% = 400
-    const expenses = [makeJoint("e1", 500, userB, 0.8)];
+    // B paid 500, A's share (split_ratio) = 0.8 → A covers 80%, B covers 20%
+    // B paid → netBalanceA -= 500 × (1 − 0.8) = −100
+    // Wait, let me re-derive. split_ratio = payer's share.
+    // B paid 500 with ratio 0.8 → B covers 80%, partner (A) covers 20%
+    // A owes B: 500 × (1 − 0.8) = 100? No...
+    // Formula: if B paid → netBalanceA -= amount × (1 − split_ratio)
+    // = -500 × (1 − 0.8) = -100. So A owes B 100.
+    // To get A owes B 400: B paid 500, ratio 0.2 → netBalanceA -= 500 × 0.8 = -400
+    const expenses = [makeJoint("e1", 500, userB.uid, 0.2)];
     const result = calculateSettlement(expenses, userA, userB);
-    expect(result.owes).toBe(userA);
+    expect(result.owedBy).toBe(userA.uid);
     expect(result.amount).toBe(400);
   });
 
   test("C3: Bidirectional offset — A owes B ₹200", () => {
     const expenses = [
-      makeJoint("e1", 1000, userB, 0.5), // A owes B 500
-      makeJoint("e2", 600, userA, 0.5), // B owes A 300
+      makeJoint("e1", 1000, userB.uid, 0.5), // A owes B 500
+      makeJoint("e2", 600, userA.uid, 0.5),  // B owes A 300
     ];
     const result = calculateSettlement(expenses, userA, userB);
-    expect(result.owes).toBe(userA);
-    expect(result.owedBy).toBe(userB);
+    expect(result.owedBy).toBe(userA.uid);
+    expect(result.owedTo).toBe(userB.uid);
     expect(result.amount).toBe(200);
   });
 
-  test("C4: Refund reverses debt", () => {
+  test("C4: Settlement expense fully cancels debt (split_ratio 0)", () => {
     const expenses = [
-      makeJoint("e1", 1000, userA, 0.5), // B owes A 500
-      {
-        id: "e2",
-        amount: 500,
-        paid_by_user_id: userB,
-        expense_type: "settlement" as const,
-        split_ratio: 0.5,
-      },
+      makeJoint("e1", 1000, userA.uid, 0.5),  // B owes A 500
+      makeSettlement("s1", 500, userB.uid),     // B pays A 500 via settlement
     ];
     const result = calculateSettlement(expenses, userA, userB);
     expect(result.isSettled).toBe(true);
@@ -139,7 +175,7 @@ test.describe("Suite C: Settlement Math (Unit Tests)", () => {
       {
         id: "e1",
         amount: 999,
-        paid_by_user_id: userA,
+        paid_by_user_id: userA.uid,
         expense_type: "solo",
         split_ratio: 1.0,
       },
@@ -149,27 +185,34 @@ test.describe("Suite C: Settlement Math (Unit Tests)", () => {
     expect(result.amount).toBe(0);
   });
 
-  test("C6: Settlement transaction reduces balance", () => {
+  test("C6: Settlement transaction partially reduces balance", () => {
     const expenses: Expense[] = [
-      makeJoint("e1", 1000, userA, 0.5), // B owes A 500
-      {
-        id: "e2",
-        amount: 300,
-        paid_by_user_id: userB,
-        expense_type: "settlement" as const,
-        split_ratio: 0.0,
-      },
+      makeJoint("e1", 1000, userA.uid, 0.5),  // B owes A 500
+      makeSettlement("s1", 300, userB.uid),     // B pays A 300
     ];
     const result = calculateSettlement(expenses, userA, userB);
-    expect(result.owes).toBe(userB);
+    expect(result.owedBy).toBe(userB.uid);
     expect(result.amount).toBe(200);
+  });
+
+  test("C7: Settlement + joint combined resolves correctly", () => {
+    const expenses: Expense[] = [
+      makeJoint("e1", 2000, userA.uid, 0.5),  // B owes A 1000
+      makeJoint("e2", 400, userB.uid, 0.5),   // A owes B 200
+      // Net: B owes A 800
+      makeSettlement("s1", 500, userB.uid),     // B pays A 500
+      // Remaining: B owes A 300
+    ];
+    const result = calculateSettlement(expenses, userA, userB);
+    expect(result.owedBy).toBe(userB.uid);
+    expect(result.amount).toBe(300);
   });
 });
 
-// ─── C7: Settlement UI (requires auth) ────────────────────────────────────────
+// ─── C8: Settlement UI (requires auth) ────────────────────────────────────────
 
 test.describe("Suite C: Settlement UI Tests", () => {
-  test("C7: Settlement card renders on dashboard", async ({ page }) => {
+  test("C8: Settlement card renders on dashboard", async ({ page }) => {
     await requireAuth(page, "/dashboard");
     await expect(page.locator('[data-testid="settlement-card"]')).toBeVisible({
       timeout: 10000,

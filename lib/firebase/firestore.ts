@@ -19,7 +19,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./config";
-import { DEFAULT_CATEGORIES, DEFAULT_GROUPS } from "../seed/defaults";
+import { CATEGORIES_BY_GROUP, DEFAULT_GROUPS } from "../seed/defaults";
 import type { Expense, ExpenseGroup, Category, Goal, Household, User, CategoryMemory, SettlementEvent } from "@/types";
 import { nanoid } from "nanoid";
 
@@ -108,29 +108,27 @@ const _createHouseholdImpl = async (uid: string): Promise<string> => {
     household_ids: arrayUnion(householdRef.id),
   });
 
-  // Step 3: Seed default groups and categories in a batch (household doc now exists).
+  // Step 3: Seed default groups and per-group categories in a batch (household doc now exists).
   // Non-blocking: if seeding fails (e.g. Firestore rules), the household still exists
   // and the user can add groups/categories manually later.
   try {
     const seedBatch = writeBatch(db);
 
-    // Create groups and capture the default group's ID for category seeding (F-09)
-    let defaultGroupId: string | null = null;
+    // Create groups and map each group name → generated ID for category seeding
+    const groupIdByName: Record<string, string> = {};
     for (const group of DEFAULT_GROUPS) {
       const groupRef = doc(collection(db, "households", householdRef.id, "groups"));
       seedBatch.set(groupRef, group);
-      if (group.is_default) {
-        defaultGroupId = groupRef.id;
-      }
+      groupIdByName[group.name] = groupRef.id;
     }
 
-    // Seed categories with group_id pointing to the default group (F-09)
-    for (const cat of DEFAULT_CATEGORIES) {
-      const catRef = doc(collection(db, "households", householdRef.id, "categories"));
-      seedBatch.set(catRef, {
-        ...cat,
-        ...(defaultGroupId ? { group_id: defaultGroupId } : {}),
-      });
+    // Seed per-group categories: each group gets categories relevant to its theme
+    for (const [groupName, groupId] of Object.entries(groupIdByName)) {
+      const categories = CATEGORIES_BY_GROUP[groupName] ?? [];
+      for (const cat of categories) {
+        const catRef = doc(collection(db, "households", householdRef.id, "categories"));
+        seedBatch.set(catRef, { ...cat, group_id: groupId });
+      }
     }
 
     await seedBatch.commit();
