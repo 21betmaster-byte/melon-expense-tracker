@@ -203,6 +203,17 @@ export const joinHousehold = async (
     if (inviteExpiresAt.toMillis() < now.toMillis()) return "expired";
   }
 
+  // Capture old household before joining so we can clean it up afterward
+  let oldHouseholdId: string | null = null;
+  try {
+    const userSnap = await getDoc(doc(db, "users", uid));
+    if (userSnap.exists()) {
+      oldHouseholdId = userSnap.data()?.household_id ?? null;
+    }
+  } catch {
+    // Non-fatal: cleanup will just be skipped
+  }
+
   // Try to add user to household members. Firestore security rules enforce
   // that only non-members can join and only if the household has < 2 members.
   try {
@@ -221,8 +232,50 @@ export const joinHousehold = async (
     household_ids: arrayUnion(householdId),
   });
 
+  // Clean up old auto-created household (fire-and-forget).
+  // When a user signs up, useAuth self-heal creates a solo household for them.
+  // If they then join another household via invite, the old one becomes orphaned.
+  if (oldHouseholdId && oldHouseholdId !== householdId) {
+    void _cleanupOldHousehold(oldHouseholdId, uid).catch((err) => {
+      console.warn("[joinHousehold] Old household cleanup failed (non-fatal):", err);
+    });
+  }
+
   console.log("[InviteDebug] joinHousehold SUCCESS");
   return "success";
+};
+
+/** Remove user from their old household after joining a new one via invite. */
+const _cleanupOldHousehold = async (
+  oldHouseholdId: string,
+  uid: string
+): Promise<void> => {
+  const oldHousehold = await getHousehold(oldHouseholdId);
+  if (!oldHousehold) return;
+
+  if (oldHousehold.members.length <= 1) {
+    // Sole member — delete the entire household and its subcollections
+    await deleteHouseholdCompletely(oldHouseholdId);
+
+    // Clean up the invite code lookup doc
+    if (oldHousehold.invite_code) {
+      try {
+        await deleteDoc(doc(db, "invite_codes", oldHousehold.invite_code));
+      } catch {
+        // Non-fatal
+      }
+    }
+  } else {
+    // Other members exist — just remove this user
+    await updateDoc(doc(db, "households", oldHouseholdId), {
+      members: arrayRemove(uid),
+    });
+  }
+
+  // Remove old household from user's household_ids list
+  await updateDoc(doc(db, "users", uid), {
+    household_ids: arrayRemove(oldHouseholdId),
+  });
 };
 
 export const refreshInviteCode = async (householdId: string): Promise<string> => {
@@ -537,8 +590,12 @@ export const getHouseholdMembers = async (
 ): Promise<User[]> => {
   const users: User[] = [];
   for (const uid of members) {
-    const snap = await getDoc(doc(db, "users", uid));
-    if (snap.exists()) users.push(snap.data() as User);
+    try {
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) users.push(snap.data() as User);
+    } catch (err) {
+      console.warn(`[getHouseholdMembers] Failed to read profile for ${uid}:`, err);
+    }
   }
   return users;
 };

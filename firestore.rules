@@ -17,7 +17,10 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, write: if isOwner(uid);
+      // Any authenticated user can read profiles (needed for household members
+      // to see each other's names). Only the owner can write their own profile.
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid);
     }
 
     match /households/{householdId} {
