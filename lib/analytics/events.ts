@@ -30,6 +30,19 @@ export const EXPENSE_DELETED = "expense_deleted";
 export const CATEGORY_CREATED = "category_created";
 export const CATEGORY_UPDATED = "category_updated";
 
+// ─── Settlement ───────────────────────────────────────────────────────
+export const SETTLED_UP = "settled_up";
+
+// ─── Data Export ──────────────────────────────────────────────────────
+export const DATA_EXPORTED = "data_exported";
+
+// ─── Filters / Engagement ─────────────────────────────────────────────
+export const ANALYTICS_FILTER_APPLIED = "analytics_filter_applied";
+export const EXPENSE_FILTER_APPLIED = "expense_filter_applied";
+
+// ─── Session / Time ───────────────────────────────────────────────────
+export const SESSION_ENGAGED = "session_engaged";
+
 // ─── Navigation / Engagement ───────────────────────────────────────────
 export const PAGE_VIEWED = "page_viewed";
 export const SETTLEMENT_VIEWED = "settlement_viewed";

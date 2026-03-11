@@ -27,6 +27,8 @@ import { sanitizeText } from "@/lib/utils/sanitize";
 import { formatCurrency } from "@/lib/utils/format";
 import { addExpense, saveCategoryMemory } from "@/lib/firebase/firestore";
 import { incrementEvent } from "@/lib/milestones/tracker";
+import { trackEvent } from "@/lib/analytics";
+import { EXPENSE_CREATED } from "@/lib/analytics/events";
 import { useAppStore } from "@/store/useAppStore";
 import type { ExpenseTemplate } from "@/types";
 
@@ -191,6 +193,13 @@ export const QuickAddDialog = ({ open, onOpenChange, onExpandToFullForm }: Props
       const realId = await addExpense(user.household_id, expenseData);
       resolvePendingExpense(localId, realId);
       incrementEvent("expense_count");
+      trackEvent(EXPENSE_CREATED, {
+        amount: parsed.amount,
+        currency,
+        category_id: resolvedCategoryId,
+        group_id: activeGroup.id,
+        split_type: "joint",
+      });
     } catch {
       toast.error("Failed to save. It will sync when you're back online.");
     } finally {

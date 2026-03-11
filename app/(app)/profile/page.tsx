@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, ArrowLeft } from "lucide-react";
 import { logOut } from "@/lib/firebase/auth";
+import { trackEvent } from "@/lib/analytics";
+import { AUTH_SIGNED_OUT } from "@/lib/analytics/events";
 import { useAppStore } from "@/store/useAppStore";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +27,7 @@ export default function ProfilePage() {
   const [showLogout, setShowLogout] = useState(false);
 
   const handleLogout = async () => {
+    trackEvent(AUTH_SIGNED_OUT);
     await logOut();
     reset();
     router.push("/login");

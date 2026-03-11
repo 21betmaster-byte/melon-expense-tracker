@@ -8,6 +8,7 @@ import {
   setUserProps,
   setAnalyticsUserId,
   PAGE_VIEWED,
+  SESSION_ENGAGED,
 } from "@/lib/analytics";
 import { initErrorTracking } from "@/lib/analytics/error-tracking";
 import { initWebVitals } from "@/lib/analytics/web-vitals";
@@ -43,6 +44,38 @@ export function AnalyticsProvider({
       page_title: typeof document !== "undefined" ? document.title : "",
     });
   }, [pathname, searchParams]);
+
+  // Fire session_engaged after 30s of active use (visibility-aware)
+  useEffect(() => {
+    let elapsed = 0;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const tick = () => {
+      elapsed += 1;
+      if (elapsed >= 30) {
+        trackEvent(SESSION_ENGAGED, { duration_sec: elapsed });
+        if (interval) clearInterval(interval);
+      }
+    };
+
+    const start = () => {
+      if (!interval) interval = setInterval(tick, 1000);
+    };
+    const pause = () => {
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+
+    const onVisibility = () => {
+      document.hidden ? pause() : start();
+    };
+
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      pause();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   // Set user ID and properties when auth state changes
   useEffect(() => {

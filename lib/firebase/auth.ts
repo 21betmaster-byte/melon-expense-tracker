@@ -17,6 +17,8 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./config";
 import { createHousehold } from "./firestore";
+import { trackEvent } from "@/lib/analytics";
+import { HOUSEHOLD_CREATED } from "@/lib/analytics/events";
 
 // ─── Email Signup ─────────────────────────────────────────────────────────────
 // Fast-return pattern: creates the Firebase Auth user + Firestore profile
@@ -51,7 +53,9 @@ export const signUpWithEmail = async (
   // 4. Fire-and-forget: household creation + email verification
   //    These run independently — the signup flow returns immediately.
   //    useAuth will poll for the household_id to appear.
-  createHousehold(credential.user.uid).catch((err) => {
+  createHousehold(credential.user.uid).then(() => {
+    trackEvent(HOUSEHOLD_CREATED, { method: "email" });
+  }).catch((err) => {
     console.error("[signUpWithEmail] Background household creation failed:", err);
   });
 
@@ -133,11 +137,13 @@ function ensureGoogleUserSetup(user: User): void {
         });
         // Create household
         await createHousehold(user.uid);
+        trackEvent(HOUSEHOLD_CREATED, { method: "google" });
       } else {
         // Returning user: check if they need a household
         const userData = snap.data();
         if (!userData?.household_id) {
           await createHousehold(user.uid);
+          trackEvent(HOUSEHOLD_CREATED, { method: "google" });
         }
       }
     } catch (err) {

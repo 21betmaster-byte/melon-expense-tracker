@@ -42,11 +42,27 @@ export async function initAnalytics(): Promise<void> {
 
       const { app } = await import("@/lib/firebase/config");
 
-      _analytics = analyticsModule.getAnalytics(app);
+      try {
+        _analytics = analyticsModule.initializeAnalytics(app, {
+          config: {
+            // Enable debug_mode in development so events appear in GA4 DebugView
+            ...(process.env.NODE_ENV === "development" && { debug_mode: true }),
+          },
+        });
+      } catch {
+        // initializeAnalytics throws if already called (e.g. HMR) — fall back
+        _analytics = analyticsModule.getAnalytics(app);
+      }
       _logEvent = analyticsModule.logEvent;
       _setUserProperties = analyticsModule.setUserProperties;
       _setUserId = analyticsModule.setUserId;
       _ready = true;
+
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Analytics] Initialized", {
+          measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+        });
+      }
 
       // Flush any events that were queued before init completed
       for (const event of _pendingEvents) {
@@ -57,7 +73,8 @@ export async function initAnalytics(): Promise<void> {
       const perfModule = await import("firebase/performance");
       _perf = perfModule.getPerformance(app);
       _trace = perfModule.trace;
-    } catch {
+    } catch (err) {
+      console.warn("[Analytics] Init failed:", err);
       _analytics = null;
       _perf = null;
       _pendingEvents.length = 0;
@@ -79,7 +96,6 @@ export function trackEvent(
     if (_ready && _analytics && _logEvent) {
       _logEvent(_analytics, name as string, params);
     } else if (_initPromise && !_ready) {
-      // Init is in progress — queue for flush once ready
       _pendingEvents.push({ name, params });
     }
   } catch {

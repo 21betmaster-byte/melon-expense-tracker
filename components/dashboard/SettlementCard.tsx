@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { CheckCircle, ArrowRight, Handshake, History } from "lucide-react";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { SETTLEMENT_VIEWED, SETTLED_UP } from "@/lib/analytics/events";
 import { Timestamp } from "firebase/firestore";
 import type { Expense } from "@/types";
 import { sendPushNotification } from "@/lib/notifications/sendPushNotification";
@@ -85,6 +87,7 @@ export const SettlementCard = () => {
     try {
       const realId = await addExpense(household.id, expenseData);
       resolvePendingExpense(localId, realId);
+      trackEvent(SETTLED_UP, { amount: settlement.amount, currency });
 
       // Notify partner about the settlement (fire-and-forget)
       sendPushNotification({
@@ -202,7 +205,10 @@ export const SettlementCard = () => {
             {settlementExpenses.length > 5 && (
               <button
                 type="button"
-                onClick={() => setShowAllHistory(!showAllHistory)}
+                onClick={() => {
+                  if (!showAllHistory) trackEvent(SETTLEMENT_VIEWED, { count: settlementExpenses.length });
+                  setShowAllHistory(!showAllHistory);
+                }}
                 className="text-xs text-blue-400 hover:text-blue-300 mt-2"
                 data-testid="settlement-show-all-btn"
               >

@@ -24,6 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAppStore } from "@/store/useAppStore";
+import { trackEvent } from "@/lib/analytics";
+import { ANALYTICS_FILTER_APPLIED } from "@/lib/analytics/events";
 
 const TIME_PERIOD_OPTIONS = [
   { value: "3", label: "3 months" },
@@ -156,10 +158,15 @@ export default function AnalyticsPage() {
   const toggleCategory = (catId: string) => {
     setSelectedCategoryIds((prev) => {
       const next = new Set(prev);
-      if (next.has(catId)) {
-        next.delete(catId);
-      } else {
+      const adding = !next.has(catId);
+      if (adding) {
         next.add(catId);
+      } else {
+        next.delete(catId);
+      }
+      if (adding) {
+        const catName = pieCategories.find((c) => c.id === catId)?.name ?? catId;
+        trackEvent(ANALYTICS_FILTER_APPLIED, { filter_type: "category", value: catName });
       }
       return next;
     });
@@ -180,7 +187,7 @@ export default function AnalyticsPage() {
 
         <div className="flex items-center gap-2">
           {/* Time Period */}
-          <Select value={timePeriod} onValueChange={setTimePeriod}>
+          <Select value={timePeriod} onValueChange={(v) => { setTimePeriod(v); trackEvent(ANALYTICS_FILTER_APPLIED, { filter_type: "time_period", value: v }); }}>
             <SelectTrigger
               className="bg-slate-800 border-slate-700 w-[110px] shrink-0"
               data-testid="analytics-time-period"
@@ -198,7 +205,7 @@ export default function AnalyticsPage() {
 
           {/* Currency Filter (shown only when > 1 currency exists) */}
           {showCurrencyFilter && (
-            <Select value={activeCurrency} onValueChange={setCurrencyFilter}>
+            <Select value={activeCurrency} onValueChange={(v) => { setCurrencyFilter(v); trackEvent(ANALYTICS_FILTER_APPLIED, { filter_type: "currency", value: v }); }}>
               <SelectTrigger
                 className="bg-slate-800 border-slate-700 w-[90px] shrink-0"
                 data-testid="analytics-currency-filter"
@@ -274,7 +281,7 @@ export default function AnalyticsPage() {
             Total Expenses — Month on Month
           </h2>
           <div className="flex items-center gap-2">
-            <Select value={momCategoryFilter} onValueChange={setMomCategoryFilter}>
+            <Select value={momCategoryFilter} onValueChange={(v) => { setMomCategoryFilter(v); if (v !== "all") trackEvent(ANALYTICS_FILTER_APPLIED, { filter_type: "mom_category", value: v }); }}>
               <SelectTrigger
                 className="bg-slate-800 border-slate-700 w-[150px] h-7 text-xs"
                 data-testid="mom-category-filter"

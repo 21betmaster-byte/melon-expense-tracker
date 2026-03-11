@@ -21,6 +21,8 @@ import { exportExpensesToCSV } from "@/lib/utils/export";
 import { calculateSettlement } from "@/lib/utils/settlement";
 import { formatCurrency, formatMonth, safeToDate } from "@/lib/utils/format";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { DATA_EXPORTED, EXPENSE_FILTER_APPLIED } from "@/lib/analytics/events";
 import type { Expense } from "@/types";
 
 type SortKey = "date-desc" | "date-asc" | "amount-desc" | "amount-asc" | "category-az";
@@ -196,6 +198,11 @@ export default function ExpensesPage() {
       members,
       householdCurrency
     );
+    trackEvent(DATA_EXPORTED, {
+      format: "csv",
+      row_count: count,
+      filtered: isFilterActive,
+    });
     toast.success(`Exported ${count} expenses`);
   }, [sorted, categories, members, householdCurrency]);
 
@@ -289,7 +296,7 @@ export default function ExpensesPage() {
 
           {/* Filter Row: Month + Paid By + Advanced Filters */}
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={monthFilter} onValueChange={setMonthFilter}>
+            <Select value={monthFilter} onValueChange={(v) => { setMonthFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "month", value: v }); }}>
               <SelectTrigger
                 className="flex-1 min-w-0 h-9 bg-slate-900 border-slate-700 text-sm"
                 data-testid="month-filter"
@@ -304,7 +311,7 @@ export default function ExpensesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={paidByFilter} onValueChange={setPaidByFilter}>
+            <Select value={paidByFilter} onValueChange={(v) => { setPaidByFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "paid_by" }); }}>
               <SelectTrigger
                 className={`flex-1 min-w-0 h-9 text-sm ${
                   paidByFilter !== "all"
