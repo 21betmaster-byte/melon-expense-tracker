@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Tag } from "lucide-react";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { CATEGORY_CREATED } from "@/lib/analytics/events";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const CategoriesManager = () => {
@@ -35,6 +37,7 @@ export const CategoriesManager = () => {
       addCategoryToStore({ id, name, keywords: [], group_id: activeGroup.id });
       setNewName("");
       toast.success(`Category "${name}" added.`);
+      trackEvent(CATEGORY_CREATED, { category_name: name });
     } catch {
       toast.error("Failed to add category.");
     } finally {

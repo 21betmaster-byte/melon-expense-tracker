@@ -65,6 +65,11 @@ service cloud.firestore {
       }
     }
 
+    match /_analytics/{docId} {
+      // Server-only (Admin SDK) — business metrics snapshots
+      allow read, write: if false;
+    }
+
     match /invite_codes/{code} {
       // Anyone can read an invite code (the code itself is the secret)
       allow read: if true;

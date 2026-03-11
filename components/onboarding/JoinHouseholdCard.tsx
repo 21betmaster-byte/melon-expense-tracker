@@ -45,6 +45,23 @@ export const JoinHouseholdCard = ({ onSuccess }: JoinHouseholdCardProps) => {
       const result = await joinHousehold(household.id, firebaseUser.uid);
 
       if (result === "success") {
+        // Clear household-scoped store data to prevent stale state from
+        // a previous household (e.g. auto-created during signup) from
+        // blocking the newly joined household's groups/expenses.
+        useAppStore.setState({
+          household: null,
+          groups: [],
+          activeGroup: null,
+          expenses: [],
+          categories: [],
+          allCategories: [],
+          settlements: [],
+          categoryMemory: [],
+          goals: [],
+          members: [],
+          householdLoading: true,
+        });
+
         const updatedProfile = await getUserProfile(firebaseUser.uid);
         if (updatedProfile) setUser(updatedProfile);
         toast.success("Joined household successfully!");

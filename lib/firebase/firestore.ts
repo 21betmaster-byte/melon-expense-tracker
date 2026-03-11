@@ -19,6 +19,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./config";
+import { tracedFirestoreOp } from "../analytics/firestore-traces";
 import { CATEGORIES_BY_GROUP, DEFAULT_GROUPS } from "../seed/defaults";
 import type { Expense, ExpenseGroup, Category, Goal, Household, User, CategoryMemory, SettlementEvent } from "@/types";
 import { nanoid } from "nanoid";
@@ -140,9 +141,11 @@ const _createHouseholdImpl = async (uid: string): Promise<string> => {
 };
 
 export const getHousehold = async (householdId: string): Promise<Household | null> => {
-  const snap = await getDoc(doc(db, "households", householdId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as Household;
+  return tracedFirestoreOp("get_household", async () => {
+    const snap = await getDoc(doc(db, "households", householdId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as Household;
+  });
 };
 
 export const getHouseholdByInviteCode = async (
@@ -354,8 +357,10 @@ export const getUserHouseholds = async (
 // ─── Groups ──────────────────────────────────────────────────────────────────
 
 export const getGroups = async (householdId: string): Promise<ExpenseGroup[]> => {
-  const snap = await getDocs(collection(db, "households", householdId, "groups"));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ExpenseGroup));
+  return tracedFirestoreOp("get_groups", async () => {
+    const snap = await getDocs(collection(db, "households", householdId, "groups"));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ExpenseGroup));
+  });
 };
 
 export const addGroup = async (
@@ -383,10 +388,12 @@ export const archiveGroup = async (
 // ─── Categories ──────────────────────────────────────────────────────────────
 
 export const getCategories = async (householdId: string): Promise<Category[]> => {
-  const snap = await getDocs(
-    collection(db, "households", householdId, "categories")
-  );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
+  return tracedFirestoreOp("get_categories", async () => {
+    const snap = await getDocs(
+      collection(db, "households", householdId, "categories")
+    );
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
+  });
 };
 
 export const learnKeyword = async (
@@ -503,11 +510,13 @@ export const addExpense = async (
   householdId: string,
   expense: Omit<Expense, "id" | "_pending" | "_local_id">
 ): Promise<string> => {
-  const ref = await addDoc(
-    collection(db, "households", householdId, "expenses"),
-    expense
-  );
-  return ref.id;
+  return tracedFirestoreOp("create_expense", async () => {
+    const ref = await addDoc(
+      collection(db, "households", householdId, "expenses"),
+      expense
+    );
+    return ref.id;
+  });
 };
 
 export const updateExpense = async (
@@ -614,17 +623,19 @@ export const recordSettlement = async (
 export const getSettlements = async (
   householdId: string
 ): Promise<SettlementEvent[]> => {
-  try {
-    const q = query(
-      collection(db, "households", householdId, "settlements"),
-      orderBy("settled_at", "desc")
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SettlementEvent));
-  } catch {
-    // Collection may not exist yet or security rules may not allow access
-    return [];
-  }
+  return tracedFirestoreOp("get_settlements", async () => {
+    try {
+      const q = query(
+        collection(db, "households", householdId, "settlements"),
+        orderBy("settled_at", "desc")
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SettlementEvent));
+    } catch {
+      // Collection may not exist yet or security rules may not allow access
+      return [];
+    }
+  });
 };
 
 // ─── Offboarding ─────────────────────────────────────────────────────────────

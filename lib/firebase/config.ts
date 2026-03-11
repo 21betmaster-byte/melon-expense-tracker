@@ -16,6 +16,7 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim(),
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim(),
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim(),
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID?.trim(),
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);

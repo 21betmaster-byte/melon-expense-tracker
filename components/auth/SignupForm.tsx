@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { AUTH_SIGNED_UP } from "@/lib/analytics/events";
 
 export const SignupForm = () => {
   const router = useRouter();
@@ -35,6 +37,7 @@ export const SignupForm = () => {
       toast.loading("Creating your account...", { id: "signup" });
       await signUpWithEmail(values.email, values.password, values.name);
       toast.success("Account created! Taking you to your dashboard.", { id: "signup" });
+      trackEvent(AUTH_SIGNED_UP, { method: "email" });
       router.push(redirectTo);
     } catch (error: unknown) {
       const code = (error as { code?: string }).code;
@@ -57,6 +60,7 @@ export const SignupForm = () => {
       toast.loading("Signing in with Google...", { id: "google-signin" });
       await signInWithGoogle();
       toast.success("Signed in! Taking you to your dashboard.", { id: "google-signin" });
+      trackEvent(AUTH_SIGNED_UP, { method: "google" });
       router.push(redirectTo);
     } catch (error: unknown) {
       toast.dismiss("google-signin");

@@ -26,7 +26,40 @@ export default defineConfig({
   projects: [
     {
       name: "setup",
-      testMatch: /.*\.setup\.ts/,
+      testMatch: "**/auth.setup.ts",
+      testIgnore: "**/partner-auth.setup.ts",
+    },
+    {
+      name: "partner-setup",
+      testMatch: /partner-auth\.setup\.ts/,
+    },
+    {
+      name: "journeys",
+      testDir: "./tests/e2e/journeys",
+      testIgnore: ["**/two-user/**"],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "tests/setup/.auth/user.json",
+      },
+      dependencies: ["setup"],
+    },
+    {
+      name: "two-user",
+      testDir: "./tests/e2e/journeys/two-user",
+      use: {
+        ...devices["Desktop Chrome"],
+      },
+      dependencies: ["setup", "partner-setup"],
+    },
+    {
+      name: "legacy",
+      testMatch: "**/suite-*.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "tests/setup/.auth/user.json",
+      },
+      dependencies: ["setup"],
+      testIgnore: /.*\.setup\.ts/,
     },
     {
       name: "chromium",
@@ -35,7 +68,7 @@ export default defineConfig({
         storageState: "tests/setup/.auth/user.json",
       },
       dependencies: ["setup"],
-      testIgnore: /.*\.setup\.ts/,
+      testIgnore: [/.*\.setup\.ts/, /e2e\//],
     },
   ],
   webServer: {

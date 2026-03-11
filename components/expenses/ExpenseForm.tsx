@@ -11,6 +11,8 @@ import { sanitizeText } from "@/lib/utils/sanitize";
 import { useAppStore } from "@/store/useAppStore";
 import { nanoid } from "nanoid";
 import { incrementEvent } from "@/lib/milestones/tracker";
+import { trackEvent } from "@/lib/analytics";
+import { EXPENSE_CREATED, EXPENSE_UPDATED } from "@/lib/analytics/events";
 import {
   Form,
   FormControl,
@@ -329,6 +331,10 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
       updateExpenseInStore(editExpense.id, updatedData);
       onSuccess?.();
       toast.success("Expense updated.");
+      trackEvent(EXPENSE_UPDATED, {
+        expense_id: editExpense.id,
+        fields_changed: Object.keys(updatedData).join(","),
+      });
 
       try {
         await updateExpense(user.household_id, editExpense.id, updatedData);
@@ -437,6 +443,13 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
       const realId = await addExpense(user.household_id, expenseData);
       resolvePendingExpense(localId, realId);
       incrementEvent("expense_count");
+      trackEvent(EXPENSE_CREATED, {
+        amount,
+        currency: expenseCurrency ?? currency,
+        category_id: values.category_id,
+        group_id: activeGroup.id,
+        split_type: values.expense_type,
+      });
       // Notify partner about the new expense (fire-and-forget)
       sendPushNotification({
         householdId: user.household_id,

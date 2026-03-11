@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 
 export default function SettingsPage() {
-  const { user, members } = useAppStore();
+  const { user } = useAppStore();
   const router = useRouter();
 
   const handleReplayTour = () => {
@@ -33,8 +33,8 @@ export default function SettingsPage() {
       {/* Multi-household switcher (only visible with 2+ households) */}
       <HouseholdSwitcher />
 
-      {/* Partner invite (hidden when household full) */}
-      {members.length < 2 && <InvitePartner />}
+      {/* Partner invite / Household Members */}
+      <InvitePartner />
 
       {/* Currency */}
       <CurrencySelector />

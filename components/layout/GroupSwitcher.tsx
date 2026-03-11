@@ -20,6 +20,8 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { addGroup, archiveGroup } from "@/lib/firebase/firestore";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { GROUP_CREATED, GROUP_SWITCHED } from "@/lib/analytics/events";
 
 export const GroupSwitcher = () => {
   const { groups, activeGroup, setActiveGroup, setGroups, user } = useAppStore();
@@ -60,6 +62,7 @@ export const GroupSwitcher = () => {
       setNewGroupName("");
       setOpen(false);
       toast.success(`Group "${trimmed}" created!`);
+      trackEvent(GROUP_CREATED, { group_name: trimmed });
     } catch {
       toast.error("Failed to create group.");
     } finally {
@@ -151,7 +154,10 @@ export const GroupSwitcher = () => {
             className="flex items-center justify-between group/item"
           >
             <DropdownMenuItem
-              onClick={() => setActiveGroup(group)}
+              onClick={() => {
+                setActiveGroup(group);
+                trackEvent(GROUP_SWITCHED, { group_id: group.id });
+              }}
               className={`flex-1 cursor-pointer text-slate-200 focus:bg-slate-800 focus:text-slate-100 ${
                 activeGroup?.id === group.id ? "bg-slate-800" : ""
               }`}

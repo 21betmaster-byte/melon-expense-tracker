@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCountdown, getInviteUrl, shareInvite } from "@/lib/utils/invite";
 import type { CountdownResult } from "@/lib/utils/invite";
+import { trackEvent } from "@/lib/analytics";
+import { INVITE_SENT } from "@/lib/analytics/events";
 
 export const InvitePartner = () => {
   const { household, householdLoading, members, setHousehold, user } = useAppStore();
@@ -40,6 +42,7 @@ export const InvitePartner = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast.success("Invite link copied!");
+    trackEvent(INVITE_SENT, { invite_method: "link" });
   };
 
   const handleShare = async () => {
@@ -47,6 +50,7 @@ export const InvitePartner = () => {
     const result = await shareInvite(inviteLink);
     if (result === "shared") {
       toast.success("Invite shared!");
+      trackEvent(INVITE_SENT, { invite_method: "share" });
     } else if (result === "copied") {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

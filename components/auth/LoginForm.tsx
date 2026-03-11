@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { AUTH_SIGNED_IN } from "@/lib/analytics/events";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -39,6 +41,7 @@ export const LoginForm = () => {
   const onSubmit = async (values: LoginValues) => {
     try {
       await signInWithEmail(values.email, values.password);
+      trackEvent(AUTH_SIGNED_IN, { method: "email" });
       router.push(redirectTo);
     } catch (error: unknown) {
       const code = (error as { code?: string }).code;
@@ -56,6 +59,7 @@ export const LoginForm = () => {
       toast.loading("Signing in with Google...", { id: "google-signin" });
       await signInWithGoogle();
       toast.success("Signed in! Taking you to your dashboard.", { id: "google-signin" });
+      trackEvent(AUTH_SIGNED_IN, { method: "google" });
       router.push(redirectTo);
     } catch (error: unknown) {
       toast.dismiss("google-signin");

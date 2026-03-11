@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Layers } from "lucide-react";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { GROUP_CREATED } from "@/lib/analytics/events";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const GroupsManager = () => {
@@ -31,6 +33,7 @@ export const GroupsManager = () => {
       setGroups([...groups, { id, name, is_default: false }]);
       setNewName("");
       toast.success(`Group "${name}" added.`);
+      trackEvent(GROUP_CREATED, { group_name: name });
     } catch {
       toast.error("Failed to add group.");
     } finally {

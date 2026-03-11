@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, XCircle, CheckCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { trackEvent } from "@/lib/analytics";
+import { INVITE_ACCEPTED, HOUSEHOLD_JOINED } from "@/lib/analytics/events";
 
 type Status = "loading" | "ready" | "invalid" | "full" | "expired" | "success" | "no-auth";
 
@@ -81,6 +83,8 @@ export default function InvitePage() {
       const result = await joinHousehold(householdId, firebaseUser.uid, inviteExpiresAt);
       console.log("[InvitePage] joinHousehold result:", result);
       if (result === "success") {
+        trackEvent(INVITE_ACCEPTED);
+        trackEvent(HOUSEHOLD_JOINED);
         // Clear household-scoped store data to prevent stale state from
         // a previous household (e.g. auto-created during signup) from
         // blocking the newly joined household's groups/expenses.

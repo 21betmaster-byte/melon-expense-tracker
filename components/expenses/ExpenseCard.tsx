@@ -26,6 +26,8 @@ import { ExpenseForm } from "./ExpenseForm";
 import type { Expense } from "@/types";
 import { ChevronDown, ChevronUp, Clock, Pencil, Repeat, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+import { EXPENSE_DELETED } from "@/lib/analytics/events";
 
 interface Props {
   expense: Expense;
@@ -74,6 +76,7 @@ export const ExpenseCard = ({ expense }: Props) => {
 
       // Actual Firestore delete
       await deleteExpense(user.household_id, expense.id);
+      trackEvent(EXPENSE_DELETED, { expense_id: expense.id });
     } catch {
       toast.error("Failed to delete expense.");
     } finally {
