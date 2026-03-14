@@ -13,11 +13,18 @@ export const useInstallPrompt = () => {
 
   useEffect(() => {
     // Check if already installed (standalone mode)
-    const standalone = window.matchMedia("(display-mode: standalone)").matches;
+    // iOS Safari uses navigator.standalone instead of display-mode media query
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsInstalled(standalone);
 
-    // Detect iOS
-    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone;
+    // Detect iOS — modern iPads (iPadOS 13+) report a macOS user agent,
+    // so also check for "MacIntel" platform with touch support
+    const ios =
+      (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) &&
+      !standalone;
     setIsIOS(ios);
 
     const handler = (e: Event) => {
@@ -41,14 +48,19 @@ export const useInstallPrompt = () => {
 
   const promptInstall = useCallback(async () => {
     if (!deferredPrompt) return false;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
+    try {
+      await deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
       setDeferredPrompt(null);
-      setIsInstalled(true);
-      return true;
+      if (outcome === "accepted") {
+        setIsInstalled(true);
+        return true;
+      }
+      return false;
+    } catch {
+      setDeferredPrompt(null);
+      return false;
     }
-    return false;
   }, [deferredPrompt]);
 
   return { canInstall, isInstalled, isIOS, promptInstall };

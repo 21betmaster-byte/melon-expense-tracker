@@ -86,6 +86,27 @@ export const InstallApp = () => {
     );
   }
 
-  // Unsupported — don't render
-  return null;
+  // Fallback — browser doesn't support beforeinstallprompt or prompt hasn't fired yet
+  return (
+    <Card className="bg-slate-900 border-slate-800" data-testid="install-app-card">
+      <CardHeader>
+        <CardTitle className="text-slate-100 flex items-center gap-2 text-base">
+          <Smartphone className="w-4 h-4 text-blue-400" />
+          Install Melon
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-slate-400">
+          Install Melon for quick access from your home screen.
+        </p>
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">
+            Open this page in Chrome or Edge, then look for the install option
+            in your browser&apos;s menu (⋮ &gt; &quot;Install app&quot; or
+            &quot;Add to Home Screen&quot;).
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 };

@@ -40,6 +40,12 @@ firebase-debug.log
 # service account keys
 service-account-key.json
 
+# next-pwa generated service worker
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+
 # vercel
 .vercel
 
