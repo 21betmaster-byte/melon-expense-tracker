@@ -23,6 +23,12 @@ async function openExpenseForm(page: Page) {
   await expect(addBtn).toBeVisible({ timeout: 10000 });
   await addBtn.click();
   await page.waitForSelector('[data-testid="expense-form"]', { timeout: 5000 });
+  // Advance to Stage 2 (progressive disclosure)
+  await page.locator('[data-testid="amount-input"]').fill("1.00");
+  await page.locator('[data-testid="description-input"]').fill("test");
+  await page.locator('[data-testid="description-input"]').press("Enter");
+  await page.waitForSelector('[data-testid="stage2-fields"]', { timeout: 5000 });
+  await page.waitForTimeout(400);
 }
 
 // ─── H16–H25: Inline Category Creation ──────────────────────────────────────

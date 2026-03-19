@@ -2,6 +2,7 @@ import { test, expect } from "../fixtures";
 import { DashboardPage } from "../pages/dashboard.page";
 import { waitForStoreReady } from "../helpers/wait-strategies";
 import { getExpenses } from "../helpers/store-reader";
+import { ExpenseFormComponent } from "../components/expense-form.component";
 
 test.describe("Journey 15: Form Validation", () => {
   test("empty form submit does not create expense", async ({ page }) => {
@@ -12,9 +13,10 @@ test.describe("Journey 15: Form Validation", () => {
     const initialCount = initialExpenses.length;
 
     await dashboard.openAddExpenseDialog();
+    const form = new ExpenseFormComponent(page);
 
-    // Try to submit without filling required fields
-    await page.locator('[data-testid="submit-expense"]').click();
+    // In Stage 1, pressing Enter with empty fields should show validation errors
+    await page.locator('[data-testid="amount-input"]').press("Enter");
 
     // Wait a moment for any processing
     await page.waitForTimeout(1000);
@@ -23,8 +25,9 @@ test.describe("Journey 15: Form Validation", () => {
     const afterExpenses = await getExpenses(page);
     expect(afterExpenses.length).toBe(initialCount);
 
-    // Form should still be visible (not dismissed)
+    // Form should still be visible and in Stage 1 (not dismissed)
     await expect(page.locator('[data-testid="expense-form"]')).toBeVisible();
+    expect(await form.isStage1()).toBe(true);
   });
 
   test("non-numeric amount is rejected", async ({ page }) => {
@@ -42,10 +45,13 @@ test.describe("Journey 15: Form Validation", () => {
     // Amount inputs typically filter non-numeric characters
     expect(value === "" || value === "abc").toBe(true);
 
-    // Try to submit
+    // Fill description and advance to Stage 2
     const descInput = page.locator('[data-testid="description-input"]');
     await descInput.fill("E2E_TEST_validation");
-    await page.locator('[data-testid="submit-expense"]').click();
+
+    // If amount was rejected (empty), Enter won't advance — Stage 1 error
+    // If amount was accepted, Enter will advance to Stage 2
+    await descInput.press("Enter");
     await page.waitForTimeout(1000);
 
     // Form should still be visible or show validation error

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,7 +12,15 @@ import { useAppStore } from "@/store/useAppStore";
 import { nanoid } from "nanoid";
 import { incrementEvent } from "@/lib/milestones/tracker";
 import { trackEvent } from "@/lib/analytics";
-import { EXPENSE_CREATED, EXPENSE_UPDATED } from "@/lib/analytics/events";
+import {
+  EXPENSE_CREATED,
+  EXPENSE_UPDATED,
+  EXPENSE_FORM_OPENED,
+  EXPENSE_FORM_STAGE2_REACHED,
+  EXPENSE_FORM_VALIDATION_ERROR,
+  EXPENSE_FORM_FIELD_EDITED,
+  EXPENSE_FORM_SAVE_FAILED,
+} from "@/lib/analytics/events";
 import {
   Form,
   FormControl,
@@ -34,7 +42,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Check, Repeat } from "lucide-react";
+import { Plus, Check, Repeat, Loader2 } from "lucide-react";
 import type { Expense, ExpenseType } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { sendPushNotification } from "@/lib/notifications/sendPushNotification";
@@ -86,8 +94,31 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
 
   const isEditMode = !!editExpense;
 
+  // ─── Progressive Disclosure State ─────────────────────────────────────
+  // Edit mode always starts at Stage 2; create mode starts at Stage 1
+  const [stage, setStage] = useState<1 | 2>(isEditMode ? 2 : 1);
+  const [transitioning, setTransitioning] = useState(false);
+  const [stage2Visible, setStage2Visible] = useState(isEditMode);
+  const formOpenTracked = useRef(false);
+
+  // Track form open once
+  useEffect(() => {
+    if (!formOpenTracked.current) {
+      formOpenTracked.current = true;
+      if (!isEditMode) {
+        trackEvent(EXPENSE_FORM_OPENED, {
+          source: window.location.pathname.includes("dashboard") ? "dashboard" : "expenses_page",
+          has_template: !!initialValues,
+        });
+      }
+    }
+  }, [isEditMode, initialValues]);
+
   const [suggestedCategoryId, setSuggestedCategoryId] = useState<string | null>(null);
   const [categorySource, setCategorySource] = useState<"memory" | "auto" | "manual" | null>(null);
+
+  // Stage 1 validation error state (separate from form-level errors for progressive disclosure)
+  const [stage1Errors, setStage1Errors] = useState<{ amount?: string; description?: string }>({});
 
   // Inline category creation state
   const [showInlineCategory, setShowInlineCategory] = useState(false);
@@ -151,6 +182,7 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
   });
 
   const descriptionValue = form.watch("description");
+  const amountValue = form.watch("amount");
   const expenseType = form.watch("expense_type");
   const isRecurring = form.watch("is_recurring");
   const paidByUserId = form.watch("paid_by_user_id");
@@ -164,8 +196,27 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
       ...getDefaultValues(),
       ...initialValues,
     });
+    // Auto-advance to Stage 2 if template fills both amount and description
+    if (initialValues.amount && initialValues.description) {
+      setStage(2);
+      setStage2Visible(true);
+      trackEvent(EXPENSE_FORM_STAGE2_REACHED, { trigger: "template" });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialValues]);
+
+  // Clear stage 1 validation errors when user types
+  useEffect(() => {
+    if (stage1Errors.amount && amountValue) {
+      setStage1Errors((prev) => ({ ...prev, amount: undefined }));
+    }
+  }, [amountValue, stage1Errors.amount]);
+
+  useEffect(() => {
+    if (stage1Errors.description && descriptionValue) {
+      setStage1Errors((prev) => ({ ...prev, description: undefined }));
+    }
+  }, [descriptionValue, stage1Errors.description]);
 
   // Debounce description value for auto-categorization (300ms)
   const [debouncedDesc, setDebouncedDesc] = useState("");
@@ -233,6 +284,52 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
     return `${payerName} covers ${payerPct}% · ${partnerName} covers ${partnerPct}%`;
   })();
 
+  // ─── Stage 1 → Stage 2 Transition ──────────────────────────────────────
+  const advanceToStage2 = useCallback(() => {
+    const currentAmount = form.getValues("amount");
+    const currentDesc = form.getValues("description");
+    const errors: { amount?: string; description?: string } = {};
+
+    if (!currentAmount || currentAmount.trim() === "") {
+      errors.amount = "Amount is required";
+    }
+    if (!currentDesc || currentDesc.trim() === "") {
+      errors.description = "Description is required";
+    }
+
+    if (errors.amount || errors.description) {
+      setStage1Errors(errors);
+      const errorFields = [errors.amount && "amount", errors.description && "description"].filter(Boolean).join(",");
+      trackEvent(EXPENSE_FORM_VALIDATION_ERROR, { fields: errorFields });
+      return;
+    }
+
+    setStage1Errors({});
+    setTransitioning(true);
+    trackEvent(EXPENSE_FORM_STAGE2_REACHED, { trigger: "enter_key" });
+
+    // Brief loader then reveal fields
+    setTimeout(() => {
+      setStage(2);
+      setTransitioning(false);
+      // Trigger animation after a frame
+      requestAnimationFrame(() => {
+        setStage2Visible(true);
+      });
+    }, 400);
+  }, [form]);
+
+  // Handle Enter key in Stage 1 — validate and transition instead of submitting
+  const handleStage1KeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (stage === 1 && e.key === "Enter") {
+        e.preventDefault();
+        advanceToStage2();
+      }
+    },
+    [stage, advanceToStage2]
+  );
+
   // Inline category creation handler
   const handleCreateCategory = async () => {
     const trimmed = newCategoryName.trim();
@@ -266,6 +363,7 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
   // Track manual category changes
   const handleCategoryChange = (newCategoryId: string) => {
     form.setValue("category_id", newCategoryId, { shouldValidate: true });
+    trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "category" });
     // If user changed category away from the suggested one, mark as manual
     if (newCategoryId !== suggestedCategoryId) {
       userManuallyChangedCategory.current = true;
@@ -407,6 +505,9 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
       is_recurring: false,
       recurring_frequency: "monthly",
     });
+    // Reset progressive disclosure state
+    setStage(1);
+    setStage2Visible(false);
     setSuggestedCategoryId(null);
     setCategorySource(null);
     userManuallyChangedCategory.current = false;
@@ -465,17 +566,31 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
         }),
       });
     } catch {
+      trackEvent(EXPENSE_FORM_SAVE_FAILED, {});
       toast.error("Failed to save expense. It will sync when you're back online.");
     }
+  };
+
+  // Prevent form submission in Stage 1 (Enter key advances to Stage 2 instead)
+  const handleFormSubmit = (e: React.FormEvent) => {
+    if (stage === 1) {
+      e.preventDefault();
+      advanceToStage2();
+      return;
+    }
+    form.handleSubmit(onSubmit)(e);
   };
 
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={handleFormSubmit}
         className="space-y-3"
         data-testid="expense-form"
+        data-stage={stage}
       >
+        {/* ─── Stage 1: Amount + Description ─────────────────────────── */}
+
         {/* Amount */}
         <FormField
           control={form.control}
@@ -490,8 +605,15 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                   step="0.01"
                   placeholder="0.00"
                   data-testid="amount-input"
+                  onKeyDown={handleStage1KeyDown}
+                  autoFocus={!isEditMode}
                 />
               </FormControl>
+              {stage1Errors.amount && (
+                <p className="text-sm font-medium text-destructive" data-testid="amount-error">
+                  {stage1Errors.amount}
+                </p>
+              )}
               <FormMessage />
             </FormItem>
           )}
@@ -510,323 +632,366 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                   placeholder="e.g. Swiggy dinner"
                   maxLength={100}
                   data-testid="description-input"
+                  onKeyDown={handleStage1KeyDown}
                 />
               </FormControl>
               <p className="text-xs text-slate-400 mt-1">Helps with auto-categorization next time</p>
+              {stage1Errors.description && (
+                <p className="text-sm font-medium text-destructive" data-testid="description-error">
+                  {stage1Errors.description}
+                </p>
+              )}
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Expense Type */}
-        <FormField
-          control={form.control}
-          name="expense_type"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Type</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid="expense-type-select">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="joint">Joint (shared)</SelectItem>
-                  <SelectItem value="solo">Solo (personal)</SelectItem>
-                  <SelectItem value="settlement">Settlement</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Paid By */}
-        <FormField
-          control={form.control}
-          name="paid_by_user_id"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Paid By</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid="paid-by-select">
-                    <SelectValue placeholder="Who paid?" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {members.map((m) => (
-                    <SelectItem key={m.uid} value={m.uid}>
-                      {m.name} {m.uid === user?.uid ? "(You)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Split % slider — only for joint expenses */}
-        {expenseType === "joint" && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <FormField
-                  control={form.control}
-                  name="split_pct"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between">
-                        <FormLabel>Payer&apos;s Share</FormLabel>
-                        <span className="text-blue-400 font-semibold text-sm">
-                          {field.value}%
-                        </span>
-                      </div>
-                      <FormControl>
-                        <Slider
-                          min={0}
-                          max={100}
-                          step={5}
-                          value={[field.value]}
-                          onValueChange={([v]) => field.onChange(v)}
-                          className="mt-1"
-                          data-testid="split-ratio-input"
-                        />
-                      </FormControl>
-                      {splitLabel && (
-                        <p className="text-xs text-slate-400 mt-1">{splitLabel}</p>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Adjust how the expense is split between you and your partner</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        {/* Stage 1 hint */}
+        {stage === 1 && !transitioning && (
+          <p className="text-xs text-slate-500 text-center" data-testid="stage1-hint">
+            Press Enter to continue
+          </p>
         )}
 
-        {/* Category */}
-        <FormField
-          control={form.control}
-          name="category_id"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                Category
-                {categorySource === "memory" && field.value === suggestedCategoryId && (
-                  <span className="ml-2 text-xs text-purple-400">Remembered</span>
-                )}
-                {categorySource === "auto" && field.value === suggestedCategoryId && (
-                  <span className="ml-2 text-xs text-green-400">Auto-detected</span>
-                )}
-              </FormLabel>
-              <Select onValueChange={handleCategoryChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid="category-select" disabled={householdLoading || !activeGroup}>
-                    <SelectValue placeholder={
-                      householdLoading
-                        ? "Loading categories…"
-                        : !activeGroup
-                        ? "No group selected"
-                        : categories.length === 0
-                        ? "No categories — create one below"
-                        : "Select category"
-                    } />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* ─── Transition Loader ──────────────────────────────────────── */}
+        {transitioning && (
+          <div className="flex justify-center py-4" data-testid="stage-transition-loader">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+          </div>
+        )}
 
-        {/* Inline Category Creation */}
-        {!showInlineCategory ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-0"
-            onClick={() => setShowInlineCategory(true)}
-            data-testid="inline-category-trigger"
+        {/* ─── Stage 2: Remaining Fields (animated reveal) ───────────── */}
+        {stage === 2 && (
+          <div
+            className={`space-y-3 transition-all duration-300 ease-out ${
+              stage2Visible
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-4"
+            }`}
+            data-testid="stage2-fields"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Create new category
-          </Button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <Input
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="Category name"
-              className="h-8 text-xs"
-              maxLength={30}
-              autoFocus
-              data-testid="inline-category-input"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newCategoryName.trim()) {
-                  e.preventDefault();
-                  handleCreateCategory();
-                }
-              }}
+            {/* Expense Type */}
+            <FormField
+              control={form.control}
+              name="expense_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Type</FormLabel>
+                  <Select onValueChange={(v) => { field.onChange(v); trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "expense_type" }); }} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="expense-type-select">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="joint">Joint (shared)</SelectItem>
+                      <SelectItem value="solo">Solo (personal)</SelectItem>
+                      <SelectItem value="settlement">Settlement</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
+
+            {/* Paid By */}
+            <FormField
+              control={form.control}
+              name="paid_by_user_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Paid By</FormLabel>
+                  <Select onValueChange={(v) => { field.onChange(v); trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "paid_by" }); }} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="paid-by-select">
+                        <SelectValue placeholder="Who paid?" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {members.map((m) => (
+                        <SelectItem key={m.uid} value={m.uid}>
+                          {m.name} {m.uid === user?.uid ? "(You)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Split % slider — only for joint expenses */}
+            {expenseType === "joint" && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <FormField
+                      control={form.control}
+                      name="split_pct"
+                      render={({ field }) => (
+                        <FormItem>
+                          <div className="flex items-center justify-between">
+                            <FormLabel>Payer&apos;s Share</FormLabel>
+                            <span className="text-blue-400 font-semibold text-sm">
+                              {field.value}%
+                            </span>
+                          </div>
+                          <FormControl>
+                            <Slider
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={[field.value]}
+                              onValueChange={([v]) => field.onChange(v)}
+                              className="mt-1"
+                              data-testid="split-ratio-input"
+                            />
+                          </FormControl>
+                          {splitLabel && (
+                            <p className="text-xs text-slate-400 mt-1">{splitLabel}</p>
+                          )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Adjust how the expense is split between you and your partner</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {/* Category */}
+            <FormField
+              control={form.control}
+              name="category_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Category
+                    {categorySource === "memory" && field.value === suggestedCategoryId && (
+                      <span className="ml-2 text-xs text-purple-400">Remembered</span>
+                    )}
+                    {categorySource === "auto" && field.value === suggestedCategoryId && (
+                      <span className="ml-2 text-xs text-green-400">Auto-detected</span>
+                    )}
+                  </FormLabel>
+                  <Select onValueChange={handleCategoryChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="category-select" disabled={householdLoading || !activeGroup}>
+                        <SelectValue placeholder={
+                          householdLoading
+                            ? "Loading categories…"
+                            : !activeGroup
+                            ? "No group selected"
+                            : categories.length === 0
+                            ? "No categories — create one below"
+                            : "Select category"
+                        } />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Inline Category Creation */}
+            {!showInlineCategory ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-0"
+                onClick={() => setShowInlineCategory(true)}
+                data-testid="inline-category-trigger"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Create new category
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Category name"
+                  className="h-8 text-xs"
+                  maxLength={30}
+                  autoFocus
+                  data-testid="inline-category-input"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newCategoryName.trim()) {
+                      e.preventDefault();
+                      handleCreateCategory();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 shrink-0"
+                  disabled={!newCategoryName.trim() || creatingCategory}
+                  onClick={handleCreateCategory}
+                  data-testid="inline-category-confirm"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+
+            {/* Date + Currency — side by side */}
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="date"
+                        max={new Date().toISOString().split("T")[0]}
+                        data-testid="date-input"
+                        className="h-9"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="currency_override"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Select onValueChange={(v) => { field.onChange(v); trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "currency" }); }} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="currency-override-select" className="h-9">
+                          <SelectValue placeholder="Select currency" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SUPPORTED_CURRENCIES.map((cur) => (
+                          <SelectItem key={cur} value={cur}>
+                            {cur}{cur === currency ? " (Default)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Recurring Toggle — hidden for settlement type (F-03) */}
+            {expenseType !== "settlement" && (
+              <div className="flex items-center justify-between">
+                <Label htmlFor="recurring-toggle" className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                  <Repeat className="w-4 h-4" />
+                  Recurring
+                </Label>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Switch
+                        id="recurring-toggle"
+                        checked={isRecurring ?? false}
+                        onCheckedChange={(checked) => form.setValue("is_recurring", checked)}
+                        data-testid="recurring-toggle"
+                        aria-label="Mark as recurring expense"
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Mark this as a repeating expense</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+
+            {/* Frequency selector — shown when recurring is ON */}
+            {expenseType !== "settlement" && isRecurring && (
+              <FormField
+                control={form.control}
+                name="recurring_frequency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Frequency</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? "monthly"}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Monthly" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Notes — compact single line */}
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes <span className="text-xs text-slate-500 font-normal">(optional)</span></FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="Add notes"
+                      maxLength={200}
+                      className="h-9"
+                      data-testid="expense-notes-input"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Bottom padding so floating button doesn't overlap last field */}
+            <div className="h-2" />
+          </div>
+        )}
+
+        {/* ─── Action Buttons ─────────────────────────────────────────── */}
+        {stage === 2 && (
+          <div
+            className="sticky bottom-0 z-10 border-t border-slate-800 bg-slate-900 pt-3 pb-1"
+            data-testid="form-actions"
+          >
             <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0 shrink-0"
-              disabled={!newCategoryName.trim() || creatingCategory}
-              onClick={handleCreateCategory}
-              data-testid="inline-category-confirm"
+              type="submit"
+              className="w-full"
+              disabled={form.formState.isSubmitting}
+              data-testid="submit-expense"
             >
-              <Check className="w-3.5 h-3.5" />
+              {form.formState.isSubmitting
+                ? "Saving…"
+                : (isEditMode ? "Save Changes" : "Save Expense")}
             </Button>
           </div>
         )}
-
-        {/* Date + Currency — side by side */}
-        <div className="grid grid-cols-2 gap-3">
-          <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Date</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    type="date"
-                    max={new Date().toISOString().split("T")[0]}
-                    data-testid="date-input"
-                    className="h-9"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="currency_override"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Currency</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger data-testid="currency-override-select" className="h-9">
-                      <SelectValue placeholder="Select currency" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {SUPPORTED_CURRENCIES.map((cur) => (
-                      <SelectItem key={cur} value={cur}>
-                        {cur}{cur === currency ? " (Default)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        {/* Recurring Toggle — hidden for settlement type (F-03) */}
-        {expenseType !== "settlement" && (
-          <div className="flex items-center justify-between">
-            <Label htmlFor="recurring-toggle" className="flex items-center gap-2 text-sm font-medium text-slate-200">
-              <Repeat className="w-4 h-4" />
-              Recurring
-            </Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Switch
-                    id="recurring-toggle"
-                    checked={isRecurring ?? false}
-                    onCheckedChange={(checked) => form.setValue("is_recurring", checked)}
-                    data-testid="recurring-toggle"
-                    aria-label="Mark as recurring expense"
-                  />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Mark this as a repeating expense</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
-
-        {/* Frequency selector — shown when recurring is ON */}
-        {expenseType !== "settlement" && isRecurring && (
-          <FormField
-            control={form.control}
-            name="recurring_frequency"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Frequency</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? "monthly"}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Monthly" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="yearly">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )}
-          />
-        )}
-
-        {/* Notes — compact single line */}
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notes <span className="text-xs text-slate-500 font-normal">(optional)</span></FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  placeholder="Add notes"
-                  maxLength={200}
-                  className="h-9"
-                  data-testid="expense-notes-input"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={form.formState.isSubmitting}
-          data-testid="submit-expense"
-        >
-          {form.formState.isSubmitting
-            ? (isEditMode ? "Saving…" : "Saving…")
-            : (isEditMode ? "Save Changes" : "Save Expense")}
-        </Button>
       </form>
     </Form>
   );

@@ -32,6 +32,11 @@ export const AddExpenseDialog = ({ open, onOpenChange }: Props) => {
     setSelectedTemplate({ ...template });
   };
 
+  const handleClose = () => {
+    setSelectedTemplate(null);
+    onOpenChange(false);
+  };
+
   const formInitialValues = selectedTemplate
     ? {
         amount: String(selectedTemplate.amount),
@@ -61,10 +66,7 @@ export const AddExpenseDialog = ({ open, onOpenChange }: Props) => {
           />
         )}
         <ExpenseForm
-          onSuccess={() => {
-            setSelectedTemplate(null);
-            onOpenChange(false);
-          }}
+          onSuccess={handleClose}
           initialValues={formInitialValues}
         />
       </DialogContent>

@@ -1243,6 +1243,97 @@ Comprehensive UX audit identified 24 issues. 17 fixes were implemented across 4 
 
 ---
 
+## F-26: Add Expense Form — Progressive Disclosure Redesign
+
+**Status:** ✅ DONE
+
+### Overview
+Redesigned the Add Expense form to reduce initial friction using a two-stage progressive disclosure flow. Stage 1 shows only Amount and Description; Stage 2 reveals remaining fields after validation. The Save Expense button floats at the bottom of the viewport. Cancel is available at both stages with no confirmation dialog.
+
+### Implementation
+
+#### Stage 1 — Quick Entry
+- Form opens showing only **Amount** and **Description** fields
+- **Cancel** button visible; **Save** button hidden
+- "Press Enter to continue" hint displayed
+- Enter key validates both fields, then triggers transition to Stage 2
+- Inline validation errors appear if either field is empty; clear on typing
+
+#### Stage 2 — Full Form (animated reveal)
+- Brief loader spinner shown during transition (~400ms)
+- Remaining fields (Type, Paid By, Split %, Category, Date, Currency, Recurring, Notes) slide/fade into view using CSS `transition-all duration-300` with `opacity` + `translateY`
+- All fields auto-populated using existing client-side logic (no changes to auto-population)
+- **Save Expense** button appears in a `position: sticky; bottom: 0` action bar (full width)
+- Dialog X button (top right) serves as the cancel mechanism for both stages
+- Clearing Amount or Description does NOT collapse back to Stage 1; all fields remain visible
+
+#### Edit Mode
+- Skips progressive disclosure entirely — opens directly at Stage 2 with all fields populated
+
+#### Template Auto-Advance
+- When a template chip pre-fills both Amount and Description, the form auto-advances to Stage 2
+
+#### Cancel Flow
+- Cancel in either stage closes the form immediately (no confirmation)
+- All form state is discarded; reopening starts fresh at Stage 1
+
+#### Analytics Events
+| Event | When Fired |
+|-------|-----------|
+| `expense_form_opened` | Form opens (create mode only) |
+| `expense_form_stage2_reached` | Stage 2 revealed (via Enter or template) |
+| `expense_form_cancelled` | Cancel clicked (tracks stage) |
+| `expense_form_validation_error` | Enter pressed with empty fields in Stage 1 |
+| `expense_form_field_edited` | User changes an auto-populated field in Stage 2 |
+| `expense_form_save_failed` | Save API call fails |
+
+### Files Changed
+| File | Change |
+|------|--------|
+| `components/expenses/ExpenseForm.tsx` | Progressive disclosure (stage state, animation, floating save, validation, analytics) |
+| `components/expenses/AddExpenseDialog.tsx` | Pass `onCancel` prop, handle close |
+| `components/expenses/ExpenseCard.tsx` | Pass `onCancel` prop for edit dialog |
+| `lib/analytics/events.ts` | New event constants + parameter types |
+
+### Tests: Journey 16 (16.1–16.15)
+| Test ID | Priority | Coverage |
+|---------|----------|----------|
+| 16.1 | P0 | Full happy path — Stage 1 → Stage 2 → Save |
+| 16.2 | P0 | Validation — Enter with both fields empty |
+| 16.3 | P0 | Validation — Enter with empty Amount |
+| 16.4 | P0 | Validation — Enter with empty Description |
+| 16.5 | P0 | Cancel from Stage 1 — discards data |
+| 16.6 | P0 | Cancel from Stage 2 — discards data, resets |
+| 16.7 | P1 | Save failure preserves form data |
+| 16.8 | P1 | Floating Save button visibility on scroll |
+| 16.9 | P1 | Field reveal animation renders correctly |
+| 16.10 | P1 | Clearing Amount in Stage 2 does NOT collapse |
+| 16.11 | P1 | Clearing Description in Stage 2 does NOT collapse |
+| 16.12 | P1 | Form state resets on reopen after cancel |
+| 16.13 | P1 | Responsive — mobile viewport (375x812) |
+| 16.14 | P1 | Edit mode starts at Stage 2 directly |
+| 16.15 | P1 | Progressive disclosure works from /expenses page |
+
+### Test Infrastructure
+| File | Change |
+|------|--------|
+| `tests/e2e/components/expense-form.component.ts` | New methods: `getStage()`, `isStage1()`, `isStage2()`, `waitForStage2()`, `advanceToStage2()`, `cancel()`, `hasStage1Error()`, `getStage1ErrorText()`. Updated `fillExpense()` to handle stage transition automatically. |
+| `tests/e2e/journeys/16-progressive-disclosure.spec.ts` | 15 E2E tests covering all acceptance criteria |
+
+### Key Test IDs
+| Test ID | Element |
+|---------|---------|
+| `expense-form` (data-stage) | Form container with stage attribute |
+| `stage2-fields` | Stage 2 fields wrapper (animation target) |
+| `stage-transition-loader` | Spinner shown during Stage 1 → 2 transition |
+| `amount-error` | Stage 1 inline validation error for Amount |
+| `description-error` | Stage 1 inline validation error for Description |
+| `submit-expense` | Save Expense button (Stage 2 only) |
+| `stage1-hint` | "Press Enter to continue" hint text |
+| `form-actions` | Action bar container (sticky in Stage 2) |
+
+---
+
 ## Critical Bug Fix: Timestamp Deserialization
 
 **Status:** ✅ FIXED (discovered during Phase 15 regression)

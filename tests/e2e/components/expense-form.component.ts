@@ -13,6 +13,10 @@ export interface ExpenseFormData {
 
 /**
  * Component object for the ExpenseForm — used in both add and edit dialogs.
+ *
+ * The form uses progressive disclosure:
+ * - Stage 1: Amount + Description only (create mode)
+ * - Stage 2: All fields visible (after Enter or in edit mode)
  */
 export class ExpenseFormComponent {
   private readonly form: Locator;
@@ -27,7 +31,45 @@ export class ExpenseFormComponent {
     await this.page.locator('[data-testid="amount-input"]').waitFor({ state: "visible" });
   }
 
-  /** Fill expense form fields */
+  /** Get the current form stage (1 or 2) */
+  async getStage(): Promise<number> {
+    const stage = await this.form.getAttribute("data-stage");
+    return parseInt(stage ?? "1", 10);
+  }
+
+  /** Check if form is in Stage 1 (quick entry) */
+  async isStage1(): Promise<boolean> {
+    return (await this.getStage()) === 1;
+  }
+
+  /** Check if form is in Stage 2 (full form) */
+  async isStage2(): Promise<boolean> {
+    return (await this.getStage()) === 2;
+  }
+
+  /** Wait for Stage 2 to be fully visible (fields revealed + animation done) */
+  async waitForStage2(): Promise<void> {
+    await this.page.locator('[data-testid="stage2-fields"]').waitFor({ state: "visible", timeout: 5000 });
+    // Wait for animation to complete
+    await this.page.waitForTimeout(400);
+  }
+
+  /**
+   * Advance from Stage 1 to Stage 2 by pressing Enter.
+   * Assumes amount and description are already filled.
+   */
+  async advanceToStage2(): Promise<void> {
+    const descInput = this.page.locator('[data-testid="description-input"]');
+    await descInput.press("Enter");
+    // Wait for transition loader then stage 2 fields
+    await this.waitForStage2();
+  }
+
+  /**
+   * Fill expense form fields — handles progressive disclosure automatically.
+   * In create mode: fills amount + description, advances to Stage 2, then fills remaining fields.
+   * In edit mode: Stage 2 is already visible, fills all fields directly.
+   */
   async fillExpense(data: ExpenseFormData): Promise<void> {
     // Amount
     const amountInput = this.page.locator('[data-testid="amount-input"]');
@@ -38,6 +80,13 @@ export class ExpenseFormComponent {
     const descInput = this.page.locator('[data-testid="description-input"]');
     await descInput.click();
     await descInput.fill(data.description);
+
+    // If in Stage 1, advance to Stage 2
+    if (await this.isStage1()) {
+      await this.advanceToStage2();
+    }
+
+    // Now in Stage 2 — fill remaining fields
 
     // Type (Radix Select)
     if (data.type) {
@@ -135,9 +184,14 @@ export class ExpenseFormComponent {
     await this.page.waitForTimeout(1000);
   }
 
-  /** Submit the form */
+  /** Submit the form (only works in Stage 2) */
   async submit(): Promise<void> {
     await this.page.locator('[data-testid="submit-expense"]').click();
+  }
+
+  /** Cancel the form by clicking the dialog's X (close) button */
+  async cancel(): Promise<void> {
+    await this.page.locator('[data-slot="dialog-close"]').click();
   }
 
   /** Get the form title text (for edit vs add verification) */
@@ -149,5 +203,26 @@ export class ExpenseFormComponent {
   /** Check if form is visible */
   async isVisible(): Promise<boolean> {
     return this.form.isVisible();
+  }
+
+  /** Check if the Save Expense button is visible */
+  async isSaveButtonVisible(): Promise<boolean> {
+    return this.page.locator('[data-testid="submit-expense"]').isVisible({ timeout: 1000 }).catch(() => false);
+  }
+
+  /** Check if the dialog close (X) button is visible */
+  async isCloseButtonVisible(): Promise<boolean> {
+    return this.page.locator('[data-slot="dialog-close"]').isVisible({ timeout: 1000 }).catch(() => false);
+  }
+
+  /** Check if Stage 1 validation error is shown for a field */
+  async hasStage1Error(field: "amount" | "description"): Promise<boolean> {
+    return this.page.locator(`[data-testid="${field}-error"]`).isVisible({ timeout: 1000 }).catch(() => false);
+  }
+
+  /** Get Stage 1 validation error text */
+  async getStage1ErrorText(field: "amount" | "description"): Promise<string> {
+    const errorEl = this.page.locator(`[data-testid="${field}-error"]`);
+    return (await errorEl.textContent()) ?? "";
   }
 }

@@ -13,7 +13,7 @@ import { requireAuth } from "./helpers/auth-guard";
  *  B10–B12 Currency symbol in label, description maxLength, category dropdown
  */
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function openExpenseForm(page: Page) {
   // requireAuth throws with a clear actionable message if not authenticated
@@ -25,20 +25,35 @@ async function openExpenseForm(page: Page) {
   await page.waitForSelector('[data-testid="expense-form"]', { timeout: 5000 });
 }
 
+/** Open the expense form and advance to Stage 2 (full form view) */
+async function openExpenseFormStage2(page: Page) {
+  await openExpenseForm(page);
+
+  // Fill Stage 1 fields and press Enter to advance to Stage 2
+  await page.locator('[data-testid="amount-input"]').fill("1.00");
+  await page.locator('[data-testid="description-input"]').fill("test");
+  await page.locator('[data-testid="description-input"]').press("Enter");
+
+  // Wait for Stage 2 fields to be visible
+  await page.waitForSelector('[data-testid="stage2-fields"]', { timeout: 5000 });
+  await page.waitForTimeout(400); // animation
+}
+
 // ─── B1–B4: Core Validations ──────────────────────────────────────────────────
 
 test.describe("Suite B: Expense Form — Core Validations", () => {
   test("B1: Empty form submission shows validation errors", async ({ page }) => {
     await openExpenseForm(page);
 
-    await page.click('[data-testid="submit-expense"]');
+    // In Stage 1, pressing Enter with empty fields shows validation errors
+    await page.locator('[data-testid="amount-input"]').press("Enter");
 
     // Form should still be open (submission blocked by validation)
     const form = page.locator('[data-testid="expense-form"]');
     await expect(form).toBeVisible();
 
-    // At least one validation message should appear
-    const errorMessages = page.locator('[role="alert"], .text-destructive, [class*="FormMessage"]');
+    // Stage 1 validation errors should appear
+    const errorMessages = page.locator('[data-testid="amount-error"], [data-testid="description-error"]');
     const count = await errorMessages.count();
     expect(count).toBeGreaterThanOrEqual(1);
   });
@@ -60,7 +75,7 @@ test.describe("Suite B: Expense Form — Core Validations", () => {
   });
 
   test("B3: Future date is rejected — max attribute is set to today", async ({ page }) => {
-    await openExpenseForm(page);
+    await openExpenseFormStage2(page);
 
     // The date input has a max attribute set to today — browser enforces this
     const maxAttr = await page
@@ -92,7 +107,7 @@ test.describe("Suite B: Expense Form — Core Validations", () => {
 
 test.describe("Suite B: Expense Form — Split % Slider", () => {
   test("B5: Joint expense type shows the split slider by default", async ({ page }) => {
-    await openExpenseForm(page);
+    await openExpenseFormStage2(page);
 
     // Default expense type is "joint" — slider must be visible
     const slider = page.locator('[data-testid="split-ratio-input"]');
@@ -100,7 +115,7 @@ test.describe("Suite B: Expense Form — Split % Slider", () => {
   });
 
   test("B6: Split slider defaults to 50%", async ({ page }) => {
-    await openExpenseForm(page);
+    await openExpenseFormStage2(page);
 
     // The percentage label next to the slider should show "50%"
     // Scope to the expense form to avoid strict mode violations with other "50%" text on the page
@@ -109,7 +124,7 @@ test.describe("Suite B: Expense Form — Split % Slider", () => {
   });
 
   test("B7: Switching to solo type hides the split slider", async ({ page }) => {
-    await openExpenseForm(page);
+    await openExpenseFormStage2(page);
 
     const slider = page.locator('[data-testid="split-ratio-input"]');
     await expect(slider).toBeVisible({ timeout: 5000 });
@@ -121,7 +136,7 @@ test.describe("Suite B: Expense Form — Split % Slider", () => {
   });
 
   test("B8: Switching to settlement type also hides the split slider", async ({ page }) => {
-    await openExpenseForm(page);
+    await openExpenseFormStage2(page);
 
     await page.locator('[data-testid="expense-type-select"]').click();
     await page.getByRole("option", { name: /Settlement/i }).click();
@@ -131,7 +146,7 @@ test.describe("Suite B: Expense Form — Split % Slider", () => {
   });
 
   test("B9: Switching back to joint type reveals the split slider again", async ({ page }) => {
-    await openExpenseForm(page);
+    await openExpenseFormStage2(page);
 
     // Go to solo first
     await page.locator('[data-testid="expense-type-select"]').click();
@@ -176,7 +191,7 @@ test.describe("Suite B: Expense Form — Currency & Auto-Category", () => {
   });
 
   test("B12: Category dropdown is visible and has selectable options", async ({ page }) => {
-    await openExpenseForm(page);
+    await openExpenseFormStage2(page);
 
     const categorySelect = page.locator('[data-testid="category-select"]');
     await expect(categorySelect).toBeVisible({ timeout: 5000 });

@@ -26,6 +26,15 @@ export const EXPENSE_CREATED = "expense_created";
 export const EXPENSE_UPDATED = "expense_updated";
 export const EXPENSE_DELETED = "expense_deleted";
 
+// ─── Expense Form (Progressive Disclosure) ────────────────────────────
+export const EXPENSE_FORM_OPENED = "expense_form_opened";
+export const EXPENSE_FORM_STAGE2_REACHED = "expense_form_stage2_reached";
+export const EXPENSE_FORM_CANCELLED = "expense_form_cancelled";
+export const EXPENSE_FORM_VALIDATION_ERROR = "expense_form_validation_error";
+export const EXPENSE_FORM_FIELD_EDITED = "expense_form_field_edited";
+export const EXPENSE_FORM_SAVE_FAILED = "expense_form_save_failed";
+export const EXPENSE_FORM_FLOATING_SAVE_USED = "expense_form_floating_save_used";
+
 // ─── Category ──────────────────────────────────────────────────────────
 export const CATEGORY_CREATED = "category_created";
 export const CATEGORY_UPDATED = "category_updated";
@@ -88,4 +97,21 @@ export interface ErrorCaughtParams {
   error_message: string;
   error_source: string;
   fatal: boolean;
+}
+
+export interface ExpenseFormOpenedParams {
+  source: "dashboard" | "expenses_page";
+  has_template: boolean;
+}
+
+export interface ExpenseFormCancelledParams {
+  stage: 1 | 2;
+}
+
+export interface ExpenseFormValidationErrorParams {
+  fields: string; // comma-separated field names that failed
+}
+
+export interface ExpenseFormFieldEditedParams {
+  field_name: string;
 }
