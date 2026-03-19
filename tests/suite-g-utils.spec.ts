@@ -362,25 +362,23 @@ test.describe("Suite G: generateInsights", () => {
   });
 
   test("G34: Steady insight detects categories with similar current and previous spend", () => {
-    // When current ≈ previous (within 10%), the steady insight should trigger.
-    // Note: generateInsights internally computes projected values using the real date.
-    // Early in the month (day <= 5), projected = current, so we test with close values.
+    // When projectedCurrent ≈ previous (within 10%), the steady insight should trigger.
+    // Use a single category so no competing increase/decrease insights crowd it out
+    // of the top-4 slice.
     const catData = [
-      { category: "Food & Dining", current: 950, previous: 1000, projectedCurrent: 950 },
-      { category: "Travel", current: 500, previous: 100, projectedCurrent: 500 },
+      { category: "Food & Dining", current: 950, previous: 1000, projectedCurrent: 980 },
     ];
     const monthlyData = [
-      { month: "Feb 26", total: 1100, userA: 0, userB: 0 },
-      { month: "Mar 26", total: 1450, userA: 0, userB: 0 },
+      { month: "Feb 26", total: 1000, userA: 0, userB: 0 },
+      { month: "Mar 26", total: 950, userA: 0, userB: 0 },
     ];
     const expenses: Expense[] = [
       makeExpense({ amount: 950, expense_type: "joint", paid_by_user_id: "uid-a", category_id: "food", date: monthsAgo(0) }),
       makeExpense({ amount: 1000, expense_type: "joint", paid_by_user_id: "uid-a", category_id: "food", date: monthsAgo(1) }),
-      makeExpense({ amount: 500, expense_type: "joint", paid_by_user_id: "uid-a", category_id: "travel", date: monthsAgo(0) }),
     ];
     const result = generateInsights(catData, monthlyData, expenses, categories, fmt);
     const steadyInsight = result.find((i) => i.type === "steady");
-    // Food is within 5% (950 vs 1000) — should be detected as steady
+    // Food projected (980) is within 2% of previous (1000) — should be detected as steady
     expect(steadyInsight).toBeDefined();
     expect(steadyInsight?.text).toContain("steady");
     expect(steadyInsight?.text).toContain("Food & Dining");

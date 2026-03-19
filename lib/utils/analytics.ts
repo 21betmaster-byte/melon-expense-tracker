@@ -165,9 +165,12 @@ export const generateInsights = (
   const isEarlyInMonth = dayOfMonthCat <= 5;
 
   // Type 1: Biggest category increase (projected)
+  // Use pre-computed projectedCurrent if available, otherwise compute from month progress
   const projectedCategoryData = categoryData.map((c) => ({
     ...c,
-    projected: isEarlyInMonth ? c.current : c.current / monthProg,
+    projected: c.projectedCurrent != null
+      ? c.projectedCurrent
+      : isEarlyInMonth ? c.current : c.current / monthProg,
   }));
 
   const withIncrease = projectedCategoryData

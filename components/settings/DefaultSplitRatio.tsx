@@ -14,9 +14,10 @@ export const DefaultSplitRatio = () => {
   const { household, setHousehold, user, members } = useAppStore();
 
   const currentRatio = household?.default_split_ratio;
-  const initialPct = currentRatio != null ? Math.round(currentRatio * 100) : 50;
+  const computedInitialPct = currentRatio != null ? Math.round(currentRatio * 100) : 50;
 
-  const [pct, setPct] = useState(initialPct);
+  const [pct, setPct] = useState(computedInitialPct);
+  const [savedPct, setSavedPct] = useState(computedInitialPct);
   const [saving, setSaving] = useState(false);
 
   const partnerPct = 100 - pct;
@@ -31,7 +32,7 @@ export const DefaultSplitRatio = () => {
   const currencySymbol =
     currency === "INR" ? "\u20B9" : currency === "USD" ? "$" : currency === "EUR" ? "\u20AC" : currency === "GBP" ? "\u00A3" : currency;
 
-  const hasChanged = pct !== initialPct;
+  const hasChanged = pct !== savedPct;
 
   const handleSave = async () => {
     if (!household?.id) return;
@@ -40,6 +41,7 @@ export const DefaultSplitRatio = () => {
       const decimalValue = pct / 100;
       await updateDoc(doc(db, "households", household.id), { default_split_ratio: decimalValue });
       setHousehold({ ...household, default_split_ratio: decimalValue });
+      setSavedPct(pct);
       toast.success("Default split ratio updated.");
     } catch {
       toast.error("Failed to update split ratio.");
