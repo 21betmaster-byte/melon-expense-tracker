@@ -60,6 +60,9 @@ export const ExpenseCard = ({ expense }: Props) => {
   const paidBy = members.find((m) => m.uid === expense.paid_by_user_id);
   const householdCurrency = household?.currency ?? "INR";
   const displayCurrency = expense.currency ?? householdCurrency;
+  const catName = category?.name ?? "";
+  const CategoryIcon = getCategoryIcon(catName);
+  const categoryColor = getCategoryColor(catName);
   const typeColor = TYPE_COLORS[expense.expense_type] ?? "";
 
   // Swipe-to-delete
@@ -140,16 +143,9 @@ export const ExpenseCard = ({ expense }: Props) => {
             <CardContent className="px-3 py-2">
               <div className="flex items-center gap-3">
                 {/* Category icon */}
-                {(() => {
-                  const catName = category?.name ?? "";
-                  const Icon = getCategoryIcon(catName);
-                  const color = getCategoryColor(catName);
-                  return (
-                    <div className={`shrink-0 rounded-lg bg-slate-800 p-1.5 ${color.text}`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                  );
-                })()}
+                <div className={`shrink-0 rounded-lg bg-slate-800 p-1.5 ${categoryColor.text}`}>
+                  <CategoryIcon className="w-4 h-4" />
+                </div>
 
                 {/* Content */}
                 <div className="min-w-0 flex-1">
@@ -179,7 +175,7 @@ export const ExpenseCard = ({ expense }: Props) => {
                   {/* Row 2: Metadata badges */}
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     {category && (
-                      <span className={`text-[11px] ${getCategoryColor(category.name).text}`}>
+                      <span className={`text-[11px] ${categoryColor.text}`}>
                         {category.name}
                       </span>
                     )}

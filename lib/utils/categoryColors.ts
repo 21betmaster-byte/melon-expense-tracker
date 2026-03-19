@@ -61,7 +61,7 @@ function hashString(str: string): number {
   for (let i = 0; i < str.length; i++) {
     hash = (hash * 31 + str.charCodeAt(i)) | 0;
   }
-  return Math.abs(hash);
+  return hash >>> 0;
 }
 
 export function getCategoryColor(categoryName: string): {

@@ -15,14 +15,12 @@ interface Props {
 export const ExpenseList = ({ limit, filteredExpenses, emptyMessage }: Props) => {
   const { expenses, isLoading } = useAppStore();
 
-  // Use filteredExpenses if provided, otherwise fall back to store
-  const source = filteredExpenses ?? expenses;
-  const displayed = limit ? source.slice(0, limit) : source;
-
   // Group expenses by date (apply limit first, then group)
   const grouped = useMemo(() => {
+    const source = filteredExpenses ?? expenses;
+    const items = limit ? source.slice(0, limit) : source;
     const groups: { date: string; expenses: Expense[] }[] = [];
-    for (const expense of displayed) {
+    for (const expense of items) {
       const dateStr = formatDate(expense.date);
       const last = groups[groups.length - 1];
       if (last && last.date === dateStr) {
@@ -32,7 +30,9 @@ export const ExpenseList = ({ limit, filteredExpenses, emptyMessage }: Props) =>
       }
     }
     return groups;
-  }, [displayed]);
+  }, [filteredExpenses, expenses, limit]);
+
+  const totalCount = grouped.reduce((sum, g) => sum + g.expenses.length, 0);
 
   if (isLoading) {
     return (
@@ -44,7 +44,7 @@ export const ExpenseList = ({ limit, filteredExpenses, emptyMessage }: Props) =>
     );
   }
 
-  if (displayed.length === 0) {
+  if (totalCount === 0) {
     return (
       <div className="text-center py-12 text-slate-500">
         <p className="text-sm" data-testid="expense-no-results">
