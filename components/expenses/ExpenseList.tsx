@@ -1,7 +1,9 @@
 "use client";
+import { useMemo } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { ExpenseCard } from "./ExpenseCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDate } from "@/lib/utils/format";
 import type { Expense } from "@/types";
 
 interface Props {
@@ -13,6 +15,25 @@ interface Props {
 export const ExpenseList = ({ limit, filteredExpenses, emptyMessage }: Props) => {
   const { expenses, isLoading } = useAppStore();
 
+  // Use filteredExpenses if provided, otherwise fall back to store
+  const source = filteredExpenses ?? expenses;
+  const displayed = limit ? source.slice(0, limit) : source;
+
+  // Group expenses by date (apply limit first, then group)
+  const grouped = useMemo(() => {
+    const groups: { date: string; expenses: Expense[] }[] = [];
+    for (const expense of displayed) {
+      const dateStr = formatDate(expense.date);
+      const last = groups[groups.length - 1];
+      if (last && last.date === dateStr) {
+        last.expenses.push(expense);
+      } else {
+        groups.push({ date: dateStr, expenses: [expense] });
+      }
+    }
+    return groups;
+  }, [displayed]);
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -22,10 +43,6 @@ export const ExpenseList = ({ limit, filteredExpenses, emptyMessage }: Props) =>
       </div>
     );
   }
-
-  // Use filteredExpenses if provided, otherwise fall back to store
-  const source = filteredExpenses ?? expenses;
-  const displayed = limit ? source.slice(0, limit) : source;
 
   if (displayed.length === 0) {
     return (
@@ -38,12 +55,21 @@ export const ExpenseList = ({ limit, filteredExpenses, emptyMessage }: Props) =>
   }
 
   return (
-    <div className="space-y-3">
-      {displayed.map((expense) => (
-        <ExpenseCard
-          key={expense.id ?? expense._local_id}
-          expense={expense}
-        />
+    <div className="space-y-4">
+      {grouped.map((group) => (
+        <div key={group.date}>
+          <p className="text-xs text-slate-500 font-medium mb-2 px-1">
+            {group.date}
+          </p>
+          <div className="space-y-2">
+            {group.expenses.map((expense) => (
+              <ExpenseCard
+                key={expense.id ?? expense._local_id}
+                expense={expense}
+              />
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   );

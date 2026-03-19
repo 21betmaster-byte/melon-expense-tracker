@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
-import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { formatCurrency } from "@/lib/utils/format";
+import { getCategoryColor, getCategoryIcon } from "@/lib/utils/categoryColors";
 import { deleteExpense } from "@/lib/firebase/firestore";
 import { useAppStore } from "@/store/useAppStore";
 import { Badge } from "@/components/ui/badge";
@@ -102,25 +103,14 @@ export const ExpenseCard = ({ expense }: Props) => {
     }
   };
 
-  // Split ratio display
-  const splitInfo = (() => {
-    if (expense.expense_type === "paid_for_partner") {
-      return "Partner owes full amount";
-    }
-    if (expense.expense_type === "joint" && paidBy) {
-      const payerPct = Math.round(expense.split_ratio * 100);
-      const partnerPct = 100 - payerPct;
-      const isCurrentUser = paidBy.uid === user?.uid;
-      const partnerMember = members.find((m) => m.uid !== expense.paid_by_user_id);
-      const youLabel = isCurrentUser ? "You" : paidBy.name;
-      const partnerLabel = isCurrentUser
-        ? (partnerMember?.name ?? "Partner")
-        : "You";
-      const youPct = isCurrentUser ? payerPct : partnerPct;
-      const partnerPctVal = isCurrentUser ? partnerPct : payerPct;
-      return `${youLabel}: ${youPct}% · ${partnerLabel}: ${partnerPctVal}%`;
-    }
-    return null;
+  // Settlement display: show payer → payee
+  const settlementLabel = (() => {
+    if (expense.expense_type !== "settlement") return null;
+    const isCurrentUser = paidBy?.uid === user?.uid;
+    const otherMember = members.find((m) => m.uid !== expense.paid_by_user_id);
+    const payerName = isCurrentUser ? "You" : (paidBy?.name ?? "Partner");
+    const payeeName = isCurrentUser ? (otherMember?.name ?? "Partner") : "You";
+    return `${payerName} → ${payeeName}`;
   })();
 
   return (
@@ -143,126 +133,124 @@ export const ExpenseCard = ({ expense }: Props) => {
           className="relative"
         >
           <Card
-            className="bg-slate-900 border-slate-800 cursor-pointer hover:bg-slate-800/50 transition-colors"
+            className="bg-slate-900 border-slate-800 cursor-pointer hover:bg-slate-800/50 transition-colors py-0 gap-0"
             data-testid="expense-card"
             onClick={handleCardClick}
           >
             <CardContent className="px-3 py-2">
-              {/* Row 1: Description + Amount */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <p className="font-medium text-slate-100 truncate text-sm">
-                    {expense.description || category?.name || "Expense"}
-                  </p>
-                  {expense._pending && (
-                    <Clock
-                      className="w-3 h-3 text-amber-400 shrink-0"
-                      data-testid="pending-indicator"
-                    />
+              <div className="flex items-center gap-3">
+                {/* Category icon */}
+                {(() => {
+                  const catName = category?.name ?? "";
+                  const Icon = getCategoryIcon(catName);
+                  const color = getCategoryColor(catName);
+                  return (
+                    <div className={`shrink-0 rounded-lg bg-slate-800 p-1.5 ${color.text}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                  );
+                })()}
+
+                {/* Content */}
+                <div className="min-w-0 flex-1">
+                  {/* Row 1: Description + Amount */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <p className="font-medium text-slate-100 truncate text-sm">
+                        {settlementLabel ?? (expense.description || category?.name || "Expense")}
+                      </p>
+                      {expense._pending && (
+                        <Clock
+                          className="w-3 h-3 text-amber-400 shrink-0"
+                          data-testid="pending-indicator"
+                        />
+                      )}
+                    </div>
+                    <p
+                      className={`font-semibold text-base shrink-0 ${
+                        expense.amount < 0 ? "text-amber-400" : "text-white"
+                      }`}
+                    >
+                      {expense.amount < 0 ? "-" : ""}
+                      {formatCurrency(expense.amount, displayCurrency)}
+                    </p>
+                  </div>
+
+                  {/* Row 2: Metadata badges */}
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    {category && (
+                      <span className={`text-[11px] ${getCategoryColor(category.name).text}`}>
+                        {category.name}
+                      </span>
+                    )}
+                    <Badge
+                      variant="outline"
+                      className={`text-[11px] py-0 px-1.5 ${typeColor}`}
+                    >
+                      {TYPE_LABELS[expense.expense_type] ?? expense.expense_type}
+                    </Badge>
+                    {expense.is_recurring && (
+                      <Repeat
+                        className="w-3 h-3 text-purple-400"
+                        data-testid="recurring-indicator"
+                      />
+                    )}
+                    {expense.amount < 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-amber-400 border-amber-800 py-0 px-1"
+                      >
+                        Refund
+                      </Badge>
+                    )}
+                    {expense.notes && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowNotes(!showNotes);
+                        }}
+                        className="flex items-center gap-0.5 text-[11px] text-slate-500 hover:text-slate-400"
+                        data-testid="expense-notes-toggle"
+                      >
+                        Notes
+                        {showNotes ? (
+                          <ChevronUp className="w-2.5 h-2.5" />
+                        ) : (
+                          <ChevronDown className="w-2.5 h-2.5" />
+                        )}
+                      </button>
+                    )}
+                    {/* Desktop delete on hover */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 w-5 p-0 text-slate-600 hover:text-red-400 ml-auto hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity"
+                      disabled={!!expense._pending}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDeleteDialog(true);
+                      }}
+                      data-testid="delete-expense-btn"
+                      aria-label="Delete expense"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+
+                  {/* Collapsible notes */}
+                  {showNotes && expense.notes && (
+                    <p
+                      className="text-[11px] text-slate-400 mt-1.5 bg-slate-800 rounded px-2 py-1"
+                      data-testid="expense-notes-content"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {expense.notes}
+                    </p>
                   )}
                 </div>
-                <p
-                  className={`font-semibold text-base shrink-0 ${
-                    expense.amount < 0 ? "text-amber-400" : "text-white"
-                  }`}
-                >
-                  {expense.amount < 0 ? "-" : ""}
-                  {formatCurrency(expense.amount, displayCurrency)}
-                </p>
               </div>
-
-              {/* Row 2: Metadata badges */}
-              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                <span className="text-[11px] text-slate-500">
-                  {formatDate(expense.date)}
-                </span>
-                {category && (
-                  <Badge
-                    variant="outline"
-                    className="text-[11px] text-slate-400 border-slate-700 py-0 px-1.5"
-                  >
-                    {category.name}
-                  </Badge>
-                )}
-                <Badge
-                  variant="outline"
-                  className={`text-[11px] py-0 px-1.5 ${typeColor}`}
-                >
-                  {TYPE_LABELS[expense.expense_type] ?? expense.expense_type}
-                </Badge>
-                {expense.is_recurring && (
-                  <Repeat
-                    className="w-3 h-3 text-purple-400"
-                    data-testid="recurring-indicator"
-                  />
-                )}
-                {expense.amount < 0 && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] text-amber-400 border-amber-800 py-0 px-1"
-                  >
-                    Refund
-                  </Badge>
-                )}
-                {expense.notes && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowNotes(!showNotes);
-                    }}
-                    className="flex items-center gap-0.5 text-[11px] text-slate-500 hover:text-slate-400"
-                    data-testid="expense-notes-toggle"
-                  >
-                    Notes
-                    {showNotes ? (
-                      <ChevronUp className="w-2.5 h-2.5" />
-                    ) : (
-                      <ChevronDown className="w-2.5 h-2.5" />
-                    )}
-                  </button>
-                )}
-                {/* Desktop delete on hover */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-slate-600 hover:text-red-400 ml-auto hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity"
-                  disabled={!!expense._pending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowDeleteDialog(true);
-                  }}
-                  data-testid="delete-expense-btn"
-                  aria-label="Delete expense"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </div>
-
-              {/* Row 3: Split ratio (joint / paid_for_partner only) */}
-              {splitInfo && (
-                <p
-                  className={`text-[11px] mt-1 ${
-                    expense.expense_type === "paid_for_partner"
-                      ? "text-orange-400"
-                      : "text-slate-500"
-                  }`}
-                >
-                  {splitInfo}
-                </p>
-              )}
-
-              {/* Collapsible notes */}
-              {showNotes && expense.notes && (
-                <p
-                  className="text-[11px] text-slate-400 mt-1.5 bg-slate-800 rounded px-2 py-1"
-                  data-testid="expense-notes-content"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {expense.notes}
-                </p>
-              )}
             </CardContent>
           </Card>
         </motion.div>
