@@ -1,5 +1,27 @@
 /** CSS-rendered phone mockups showing real app screens. */
 
+/* ── Tiny category icon ───────────────────────────────────────── */
+function CatIcon({ type }: { type: "food" | "housing" | "transport" | "shopping" | "entertainment" | "health" | "tag" | "settlement" }) {
+  const map: Record<string, { bg: string; color: string; d: string }> = {
+    food:          { bg: "bg-orange-900/40", color: "text-orange-400", d: "M3 3h18v2H3zm0 4h18v14H3zm4 4h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" },
+    housing:       { bg: "bg-yellow-900/40", color: "text-yellow-400", d: "M3 12l9-8 9 8v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" },
+    transport:     { bg: "bg-blue-900/40",   color: "text-blue-400",   d: "M5 17h14M5 17a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2M5 17l-1 3m15-3l1 3M8 14h.01M16 14h.01" },
+    shopping:      { bg: "bg-purple-900/40", color: "text-purple-400", d: "M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4z" },
+    entertainment: { bg: "bg-pink-900/40",   color: "text-pink-400",   d: "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" },
+    health:        { bg: "bg-green-900/40",  color: "text-green-400",  d: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
+    tag:           { bg: "bg-slate-700/40",  color: "text-slate-400",  d: "M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" },
+    settlement:    { bg: "bg-emerald-900/40", color: "text-emerald-400", d: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+  };
+  const cfg = map[type] ?? map.tag;
+  return (
+    <div className={`w-5 h-5 rounded-md ${cfg.bg} flex items-center justify-center shrink-0`}>
+      <svg className={`w-2.5 h-2.5 ${cfg.color}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={cfg.d} />
+      </svg>
+    </div>
+  );
+}
+
 /* ── Bottom Nav (matches real AppNav) ────────────────────────── */
 function BottomNav({ active = "home" }: { active?: "home" | "expenses" | "analytics" | "settings" }) {
   return (
@@ -52,16 +74,14 @@ function TopBar({ groupName = "Day to Day" }: { groupName?: string }) {
   );
 }
 
-/* ── Phone Frame ───────────────────────────────────────────────── */
+/* ── Phone Frame (no notch / dynamic island) ──────────────────── */
 function PhoneFrame({ children, className = "", nav }: { children: React.ReactNode; className?: string; nav?: React.ReactNode }) {
   return (
     <div className={`relative mx-auto w-[260px] h-[565px] md:w-[260px] md:h-[565px] lg:w-[300px] lg:h-[650px] ${className}`}>
       {/* Phone bezel */}
       <div className="relative h-full rounded-[3rem] border-[8px] border-slate-700 bg-slate-950 shadow-2xl shadow-blue-500/10 overflow-hidden flex flex-col">
-        {/* Dynamic Island */}
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 h-[28px] w-[100px] rounded-full bg-slate-700 z-10" />
         {/* Screen content */}
-        <div className="pt-11 px-3 flex-1 overflow-hidden flex flex-col relative">
+        <div className="pt-4 px-3 flex-1 overflow-hidden flex flex-col relative">
           <div className="flex-1 overflow-hidden">
             {children}
           </div>
@@ -81,19 +101,18 @@ function PhoneFrame({ children, className = "", nav }: { children: React.ReactNo
 export function DashboardPreview() {
   return (
     <PhoneFrame nav={<BottomNav active="home" />}>
-      {/* Top bar */}
       <TopBar />
 
-      {/* Group heading + Add button (matches real dashboard) */}
+      {/* Group heading + Add button */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[12px] font-semibold text-slate-100">Day to Day</h3>
+        <h3 className="text-[12px] font-semibold text-slate-100">Day to Day Expenses</h3>
         <div className="h-5 px-2 rounded-md bg-blue-600 flex items-center gap-1">
           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
           <span className="text-[8px] font-medium text-white">Add</span>
         </div>
       </div>
 
-      {/* Settlement card */}
+      {/* Settlement card with Mark as Settled + History */}
       <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-2.5 mb-2">
         <p className="text-[8px] text-slate-400 uppercase tracking-wide mb-1">Settlement</p>
         <div className="flex items-center gap-1.5 mb-0.5">
@@ -103,9 +122,30 @@ export function DashboardPreview() {
         </div>
         <p className="text-lg font-bold text-blue-400">$245.50</p>
         <p className="text-[8px] text-slate-400 mt-0.5">You owe Alex</p>
+        {/* Mark as Settled button */}
+        <div className="mt-1.5 h-5 w-fit px-2 rounded-md border border-slate-700 bg-slate-800 flex items-center gap-1">
+          <svg className="w-2.5 h-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span className="text-[7px] text-slate-300">Mark as Settled</span>
+        </div>
+        {/* Settlement History */}
+        <div className="mt-2 pt-1.5 border-t border-slate-800">
+          <p className="text-[7px] text-slate-500 uppercase tracking-wide mb-1">Settlement History</p>
+          {[
+            { amount: "$320.00", date: "11 Mar 2026" },
+            { amount: "$185.50", date: "28 Feb 2026" },
+          ].map((s) => (
+            <div key={s.date} className="flex items-center justify-between mb-0.5">
+              <span className="text-[8px] text-slate-400">Alex → You</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[8px] font-medium text-emerald-400">{s.amount}</span>
+                <span className="text-[7px] text-slate-500">{s.date}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Quick stats (matches real QuickStats component - 3 cards) */}
+      {/* Quick stats */}
       <div className="grid grid-cols-3 gap-1 mb-2">
         {[
           { label: "This Month", value: "$1,280" },
@@ -125,23 +165,26 @@ export function DashboardPreview() {
         <span className="text-[8px] text-blue-400">View all</span>
       </div>
 
-      {/* Expense list (matches real ExpenseCard pattern: category badge, description, payer, amount) */}
+      {/* Expense list with category icons + badges */}
       {[
-        { desc: "Whole Foods", amount: "$85.40", type: "Joint", who: "You", color: "text-blue-400 border-blue-800" },
-        { desc: "Electricity Bill", amount: "$142.00", type: "Joint", who: "Alex", color: "text-blue-400 border-blue-800" },
-        { desc: "Date Night", amount: "$67.50", type: "Solo", who: "You", color: "text-slate-400 border-slate-700" },
-        { desc: "Coffee Run", amount: "$12.80", type: "Solo", who: "You", color: "text-slate-400 border-slate-700" },
-        { desc: "Internet Bill", amount: "$79.99", type: "Joint", who: "Alex", color: "text-blue-400 border-blue-800" },
-        { desc: "Uber to Airport", amount: "$34.00", type: "Paid for Partner", who: "You", color: "text-orange-400 border-orange-800" },
-        { desc: "Pharmacy", amount: "$22.15", type: "Joint", who: "Alex", color: "text-blue-400 border-blue-800" },
+        { desc: "Whole Foods", amount: "$85.40", cat: "Groceries", icon: "food" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+        { desc: "Electricity Bill", amount: "$142.00", cat: "Housing & Utilities", icon: "housing" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+        { desc: "Date Night", amount: "$67.50", cat: "Food & Dining", icon: "food" as const, badge: "Solo", badgeColor: "text-slate-400 bg-slate-500/10 border-slate-500/20" },
+        { desc: "Coffee Run", amount: "$12.80", cat: "Food & Dining", icon: "food" as const, badge: "Solo", badgeColor: "text-slate-400 bg-slate-500/10 border-slate-500/20" },
+        { desc: "Internet Bill", amount: "$79.99", cat: "Housing & Utilities", icon: "housing" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+        { desc: "Uber to Airport", amount: "$34.00", cat: "Transportation", icon: "transport" as const, badge: "Paid for Partner", badgeColor: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
+        { desc: "Pharmacy", amount: "$22.15", cat: "Health & Wellness", icon: "health" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
       ].map((e) => (
         <div key={e.desc} className="rounded-md border border-slate-800 bg-slate-900/60 p-1.5 mb-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className={`text-[6px] px-1 py-px rounded border ${e.color}`}>{e.type}</span>
+              <CatIcon type={e.icon} />
               <div className="min-w-0">
                 <p className="text-[9px] text-slate-200 truncate">{e.desc}</p>
-                <p className="text-[7px] text-slate-500">{e.who} paid</p>
+                <div className="flex items-center gap-1 mt-px">
+                  <span className="text-[7px] text-blue-400">{e.cat}</span>
+                  <span className={`text-[6px] px-1 py-px rounded border ${e.badgeColor}`}>{e.badge}</span>
+                </div>
               </div>
             </div>
             <p className="text-[9px] font-medium text-slate-100 shrink-0">{e.amount}</p>
@@ -156,44 +199,83 @@ export function DashboardPreview() {
 export function AnalyticsPreview() {
   return (
     <PhoneFrame nav={<BottomNav active="analytics" />}>
-      {/* Top bar */}
       <TopBar />
 
-      {/* Header with time period filter (matches real analytics page) */}
+      {/* Header with time period filter */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[12px] font-semibold text-slate-100">Analytics</h3>
+        <h3 className="text-[11px] font-semibold text-slate-100">Analytics — Day to Day</h3>
         <div className="h-5 px-1.5 rounded border border-slate-700 bg-slate-800 flex items-center">
           <span className="text-[8px] text-slate-300">6 months ▾</span>
         </div>
       </div>
 
-      {/* Insights card (matches real AnalyticsInsights component) */}
+      {/* Category filter chips */}
+      <div className="flex gap-1 flex-wrap mb-2">
+        {["Food & Dining", "Housing", "Transport", "Entertainment", "Health", "Shopping"].map((c) => (
+          <span key={c} className="text-[6px] px-1.5 py-0.5 rounded-full border border-slate-700 bg-slate-800 text-slate-400">{c}</span>
+        ))}
+      </div>
+
+      {/* Insights card */}
       <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2 mb-2">
         <p className="text-[8px] text-blue-400 font-medium mb-0.5">Spending Insights</p>
-        <p className="text-[8px] text-slate-300 leading-relaxed">
-          Spending is down 12% from last month. Food is your top category at 34%.
+        <p className="text-[7px] text-slate-300 leading-relaxed">
+          — Housing is your top category at $890 across 4 transactions (avg $222)
+        </p>
+        <p className="text-[7px] text-slate-300 leading-relaxed">
+          — Spending is down 12% from last month. Keep it up!
         </p>
       </div>
 
-      {/* MoM Trend chart (matches real MoMTrendChart - bar chart) */}
-      <p className="text-[8px] font-medium text-slate-400 uppercase tracking-wide mb-1">Total Expenses — Month on Month</p>
+      {/* MoM Trend chart header with dropdowns */}
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[7px] font-medium text-slate-400 uppercase tracking-wide">Total Expenses — MoM</p>
+        <div className="flex gap-1">
+          <span className="text-[6px] px-1 py-0.5 rounded border border-slate-700 bg-slate-800 text-slate-400">All Categories ▾</span>
+          <span className="text-[6px] px-1 py-0.5 rounded border border-slate-700 bg-slate-800 text-slate-400">Bar ▾</span>
+        </div>
+      </div>
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2 mb-2">
-        <div className="flex items-end gap-1 h-16">
-          {[40, 65, 55, 80, 70, 60].map((h, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-              <div
-                className="w-full rounded-t bg-gradient-to-t from-blue-600 to-blue-400"
-                style={{ height: `${h}%` }}
-              />
-              <span className="text-[6px] text-slate-500">
-                {["Oct", "Nov", "Dec", "Jan", "Feb", "Mar"][i]}
-              </span>
-            </div>
-          ))}
+        {/* Y-axis labels + bars */}
+        <div className="flex gap-1">
+          {/* Y-axis */}
+          <div className="flex flex-col justify-between h-16 pr-0.5">
+            <span className="text-[5px] text-slate-600">$2k</span>
+            <span className="text-[5px] text-slate-600">$1.5k</span>
+            <span className="text-[5px] text-slate-600">$1k</span>
+            <span className="text-[5px] text-slate-600">$500</span>
+            <span className="text-[5px] text-slate-600">$0</span>
+          </div>
+          {/* Bars */}
+          <div className="flex-1 flex items-end gap-1 h-16">
+            {[
+              { h: 30, label: "Oct" },
+              { h: 42, label: "Nov" },
+              { h: 36, label: "Dec" },
+              { h: 52, label: "Jan" },
+              { h: 46, label: "Feb" },
+              { h: 40, label: "Mar" },
+            ].map((bar, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+                <div
+                  className="w-full rounded-t bg-gradient-to-t from-blue-600 to-blue-400"
+                  style={{ height: `${bar.h}px` }}
+                />
+                <span className="text-[6px] text-slate-500 mt-0.5">{bar.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Legend */}
+        <div className="flex justify-center mt-1">
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-sm bg-blue-500" />
+            <span className="text-[6px] text-slate-400">Total</span>
+          </div>
         </div>
       </div>
 
-      {/* Category Breakdown pie (matches real CategoryPieChart) */}
+      {/* Category Breakdown pie */}
       <p className="text-[8px] font-medium text-slate-400 uppercase tracking-wide mb-1">Category Breakdown</p>
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2 mb-2">
         <div className="flex items-center gap-3">
@@ -205,22 +287,22 @@ export function AnalyticsPreview() {
           </svg>
           <div className="space-y-0.5">
             {[
-              { label: "Food", pct: "34%", color: "bg-blue-500" },
-              { label: "Bills", pct: "24%", color: "bg-purple-500" },
-              { label: "Transport", pct: "22%", color: "bg-green-500" },
-              { label: "Fun", pct: "20%", color: "bg-yellow-500" },
+              { label: "Housing & Utilities", pct: "34%", color: "bg-blue-500" },
+              { label: "Food & Dining", pct: "28%", color: "bg-purple-500" },
+              { label: "Transportation", pct: "22%", color: "bg-green-500" },
+              { label: "Shopping", pct: "16%", color: "bg-yellow-500" },
             ].map((c) => (
               <div key={c.label} className="flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full ${c.color}`} />
-                <span className="text-[8px] text-slate-300">{c.label}</span>
-                <span className="text-[8px] text-slate-500">{c.pct}</span>
+                <span className="text-[7px] text-slate-300">{c.label}</span>
+                <span className="text-[7px] text-slate-500">{c.pct}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Who Paid What (matches real MemberContributionChart) */}
+      {/* Who Paid What */}
       <p className="text-[8px] font-medium text-slate-400 uppercase tracking-wide mb-1">Who Paid What</p>
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2">
         <div className="flex items-center justify-between mb-1.5">
@@ -246,16 +328,18 @@ export function AnalyticsPreview() {
 export function ExpensesPreview() {
   return (
     <PhoneFrame nav={<BottomNav active="expenses" />}>
-      {/* Top bar */}
       <TopBar />
 
-      {/* Header (matches real expenses page) */}
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[12px] font-semibold text-slate-100">All Expenses</h3>
+      {/* Header with Export CSV + Add */}
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <h3 className="text-[12px] font-semibold text-slate-100">All Expenses</h3>
+          <p className="text-[7px] text-slate-500">Day to Day Expenses · 23 transactions</p>
+        </div>
         <div className="flex gap-1">
           <div className="h-5 px-1.5 rounded-md border border-slate-700 bg-slate-800 flex items-center gap-0.5">
             <svg className="w-2.5 h-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            <span className="text-[8px] text-slate-300">CSV</span>
+            <span className="text-[7px] text-slate-300">CSV</span>
           </div>
           <div className="h-5 px-2 rounded-md bg-blue-600 flex items-center gap-0.5">
             <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
@@ -264,66 +348,80 @@ export function ExpensesPreview() {
         </div>
       </div>
 
-      {/* Tabs (matches real Tabs: All Expenses / Recurring) */}
+      {/* All / Recurring tabs */}
       <div className="flex gap-0 mb-2">
-        <div className="flex-1 h-5 rounded-l-md bg-slate-800 border border-slate-700 flex items-center justify-center border-b-2 border-b-blue-500">
-          <span className="text-[8px] font-medium text-blue-400">All Expenses</span>
+        <div className="h-5 px-3 rounded-l-md bg-slate-800 border border-slate-700 flex items-center justify-center border-b-2 border-b-blue-500">
+          <span className="text-[8px] font-medium text-blue-400">All</span>
         </div>
-        <div className="flex-1 h-5 rounded-r-md bg-slate-900 border border-slate-700 flex items-center justify-center">
+        <div className="h-5 px-3 rounded-r-md bg-slate-900 border border-slate-700 flex items-center justify-center">
           <span className="text-[8px] text-slate-400">Recurring</span>
         </div>
       </div>
 
-      {/* Summary cards (matches real Total Spent / Total Owed) */}
-      <div className="grid grid-cols-2 gap-1 mb-2">
+      {/* 3-col summary cards: Total Spent, This Month, Top Category */}
+      <div className="grid grid-cols-3 gap-1 mb-2">
         <div className="rounded-md border border-slate-800 bg-slate-900/80 p-1.5">
-          <p className="text-[7px] text-slate-500">Total Spent</p>
-          <p className="text-[11px] font-semibold text-slate-100">$2,485</p>
+          <p className="text-[6px] text-slate-500">Total Spent</p>
+          <p className="text-[10px] font-semibold text-slate-100">$2,485</p>
         </div>
         <div className="rounded-md border border-slate-800 bg-slate-900/80 p-1.5">
-          <p className="text-[7px] text-slate-500">Total Owed</p>
-          <p className="text-[11px] font-semibold text-slate-100">$245</p>
+          <p className="text-[6px] text-slate-500">This Month</p>
+          <p className="text-[10px] font-semibold text-slate-100">$1,280</p>
+        </div>
+        <div className="rounded-md border border-slate-800 bg-slate-900/80 p-1.5">
+          <p className="text-[6px] text-slate-500">Top Category</p>
+          <p className="text-[9px] font-semibold text-slate-100">Housing</p>
+          <p className="text-[6px] text-slate-500">$890</p>
         </div>
       </div>
 
-      {/* Filters (matches real: Month, Paid By, Type pills) */}
+      {/* Month filter + Filters button */}
       <div className="flex gap-1 mb-1.5">
-        <div className="h-5 px-1.5 rounded border border-slate-700 bg-slate-800 flex items-center">
+        <div className="flex-1 h-5 rounded border border-slate-700 bg-slate-800 flex items-center px-1.5">
           <span className="text-[7px] text-slate-400">All Months ▾</span>
         </div>
-        <div className="h-5 px-1.5 rounded border border-blue-500/30 bg-blue-500/10 flex items-center">
-          <span className="text-[7px] text-blue-300">You ✕</span>
+        <div className="h-5 px-1.5 rounded border border-slate-700 bg-slate-800 flex items-center gap-0.5">
+          <svg className="w-2.5 h-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+          <span className="text-[7px] text-slate-300">Filters</span>
+        </div>
+      </div>
+
+      {/* Search bar + Sort */}
+      <div className="flex gap-1 mb-2">
+        <div className="flex-1 relative">
+          <svg className="absolute left-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <div className="h-5 rounded border border-slate-700 bg-slate-900 pl-5 flex items-center">
+            <span className="text-[7px] text-slate-500">Search expenses...</span>
+          </div>
         </div>
         <div className="h-5 px-1.5 rounded border border-slate-700 bg-slate-800 flex items-center">
-          <span className="text-[7px] text-slate-400">All Types ▾</span>
+          <span className="text-[7px] text-slate-400">Date (Newest) ▾</span>
         </div>
       </div>
 
-      {/* Search bar */}
-      <div className="relative mb-2">
-        <svg className="absolute left-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-        <div className="h-5 rounded border border-slate-700 bg-slate-900 pl-5 flex items-center">
-          <span className="text-[8px] text-slate-500">Search expenses...</span>
-        </div>
-      </div>
+      {/* Date group header */}
+      <p className="text-[7px] text-slate-500 mb-1">19 Mar 2026</p>
 
-      {/* Expense list (matches real ExpenseCard: type badge, desc, payer, amount) */}
+      {/* Expense list with category icons + badges */}
       {[
-        { desc: "Whole Foods", amount: "$127.35", type: "Joint", date: "Mar 10", who: "You", color: "text-blue-400 border-blue-800" },
-        { desc: "Netflix", amount: "$15.99", type: "Solo", date: "Mar 8", who: "Alex", color: "text-slate-400 border-slate-700" },
-        { desc: "Uber", amount: "$24.50", type: "Joint", date: "Mar 7", who: "You", color: "text-blue-400 border-blue-800" },
-        { desc: "Gym Membership", amount: "$49.00", type: "Solo", date: "Mar 5", who: "Alex", color: "text-slate-400 border-slate-700" },
-        { desc: "Dinner Out", amount: "$88.20", type: "Joint", date: "Mar 3", who: "You", color: "text-blue-400 border-blue-800" },
-        { desc: "Electric Bill", amount: "$142.00", type: "Paid for Partner", date: "Mar 1", who: "Alex", color: "text-orange-400 border-orange-800" },
-        { desc: "Gas Station", amount: "$45.60", type: "Joint", date: "Feb 28", who: "You", color: "text-blue-400 border-blue-800" },
+        { desc: "Whole Foods", amount: "$127.35", cat: "Groceries", icon: "food" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+        { desc: "Netflix", amount: "$15.99", cat: "Entertainment", icon: "entertainment" as const, badge: "Solo", badgeColor: "text-slate-400 bg-slate-500/10 border-slate-500/20" },
+        { desc: "Uber", amount: "$24.50", cat: "Transportation", icon: "transport" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+        { desc: "Gym Membership", amount: "$49.00", cat: "Health & Wellness", icon: "health" as const, badge: "Solo", badgeColor: "text-slate-400 bg-slate-500/10 border-slate-500/20" },
+        { desc: "Dinner Out", amount: "$88.20", cat: "Food & Dining", icon: "food" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+        { desc: "Electric Bill", amount: "$142.00", cat: "Housing & Utilities", icon: "housing" as const, badge: "Paid for Partner", badgeColor: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
+        { desc: "Gas Station", amount: "$45.60", cat: "Transportation", icon: "transport" as const, badge: "Joint", badgeColor: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
       ].map((e) => (
         <div key={e.desc} className="rounded-md border border-slate-800 bg-slate-900/60 p-1.5 mb-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className={`text-[6px] px-1 py-px rounded border shrink-0 ${e.color}`}>{e.type}</span>
+              <CatIcon type={e.icon} />
               <div className="min-w-0">
                 <p className="text-[9px] text-slate-200 truncate">{e.desc}</p>
-                <p className="text-[7px] text-slate-500">{e.who} · {e.date}</p>
+                <div className="flex items-center gap-1 mt-px">
+                  <span className="text-[7px] text-blue-400">{e.cat}</span>
+                  <span className={`text-[6px] px-1 py-px rounded border ${e.badgeColor}`}>{e.badge}</span>
+                </div>
               </div>
             </div>
             <p className="text-[9px] font-medium text-slate-100 shrink-0">{e.amount}</p>
@@ -338,15 +436,21 @@ export function ExpensesPreview() {
 export function SplitPreview() {
   return (
     <PhoneFrame nav={<BottomNav active="expenses" />}>
-      {/* Top bar */}
       <TopBar />
 
-      {/* Header (matches real ExpenseForm dialog header) */}
+      {/* Header */}
       <div className="mb-2">
         <h3 className="text-[12px] font-semibold text-slate-100 mb-0.5">Add Expense</h3>
       </div>
 
-      {/* Expense form mockup (matches real ExpenseForm field order) */}
+      {/* Quick-add chips */}
+      <div className="flex flex-wrap gap-1 mb-2">
+        {["85 Whole Foods", "142 Electricity", "68 Date Night"].map((chip) => (
+          <span key={chip} className="text-[7px] px-1.5 py-0.5 rounded-full border border-slate-700 bg-slate-800 text-slate-400">{chip}</span>
+        ))}
+      </div>
+
+      {/* Expense form */}
       <div className="space-y-2">
         {/* Description */}
         <div>
@@ -373,7 +477,7 @@ export function SplitPreview() {
           </div>
         </div>
 
-        {/* Type (matches real PillSelect for expense type) */}
+        {/* Type pills */}
         <div>
           <p className="text-[7px] text-slate-400 mb-0.5 font-medium">Type</p>
           <div className="flex gap-1 flex-wrap">
@@ -388,7 +492,7 @@ export function SplitPreview() {
           </div>
         </div>
 
-        {/* Category (matches real PillSelect for categories) */}
+        {/* Category pills */}
         <div>
           <p className="text-[7px] text-slate-400 mb-0.5 font-medium">Category</p>
           <div className="flex gap-1 flex-wrap">
@@ -403,7 +507,7 @@ export function SplitPreview() {
           </div>
         </div>
 
-        {/* Split Ratio (matches real Slider) */}
+        {/* Split Ratio */}
         <div>
           <p className="text-[7px] text-slate-400 mb-0.5 font-medium">Split Ratio</p>
           <div className="space-y-1">
@@ -424,7 +528,7 @@ export function SplitPreview() {
           </div>
         </div>
 
-        {/* Paid By (matches real select) */}
+        {/* Paid By */}
         <div>
           <p className="text-[7px] text-slate-400 mb-0.5 font-medium">Paid By</p>
           <div className="flex gap-1.5">
