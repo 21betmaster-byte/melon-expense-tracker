@@ -7,7 +7,7 @@ interface ExpenseNotificationInput {
   description: string;
   amount: number;
   currency: string;
-  expenseType: "solo" | "joint" | "settlement";
+  expenseType: "solo" | "joint" | "settlement" | "paid_for_partner";
   splitRatio: number; // payer's share (0–1)
 }
 

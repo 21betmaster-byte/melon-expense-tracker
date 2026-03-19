@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { requestNotificationPermission, saveFCMToken } from "@/lib/firebase/messaging";
 import { useAppStore } from "@/store/useAppStore";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 
 /* ─── Tour Step Definitions ────────────────────────────────────────────── */
 
@@ -97,11 +99,21 @@ export const TourProvider = ({ children }: { children: ReactNode }) => {
   const [currentStep, setCurrentStep] = useState(0);
 
   /* ── Completion / skip ─────────────────────────────────────────── */
+  const user = useAppStore((s) => s.user);
+
   const completeTour = useCallback(() => {
     localStorage.setItem("tour_completed", "true");
     setIsTourActive(false);
     setCurrentStep(0);
-  }, []);
+
+    // Persist to Firestore (fire-and-forget)
+    if (user?.uid) {
+      updateDoc(doc(db, "users", user.uid), {
+        tour_completed: true,
+        tour_completed_at: serverTimestamp(),
+      }).catch(() => {});
+    }
+  }, [user?.uid]);
 
   const skipTour = useCallback(() => {
     completeTour();
@@ -164,8 +176,12 @@ export const TourProvider = ({ children }: { children: ReactNode }) => {
       cancelled = true;
       clearInterval(pollInterval);
       clearTimeout(safetyTimeout);
+      // If tour was started but user navigated away, mark it completed
+      if (isTourActive) {
+        localStorage.setItem("tour_completed", "true");
+      }
     };
-  }, [pathname, startTour]);
+  }, [pathname, startTour, isTourActive]);
 
   /* ── Escape key ────────────────────────────────────────────────── */
   useEffect(() => {
@@ -242,22 +258,40 @@ const TourOverlay = ({
       setRect(null);
       return;
     }
+    const el = document.querySelector(`[data-testid="${step.target}"]`) as HTMLElement | null;
+
     const measure = () => {
-      const el = document.querySelector(`[data-testid="${step.target}"]`);
       if (el) {
         setRect(el.getBoundingClientRect());
       } else {
         setRect(null);
       }
     };
-    measure();
-    // Re-measure on scroll/resize
-    window.addEventListener("scroll", measure, true);
-    window.addEventListener("resize", measure);
-    return () => {
-      window.removeEventListener("scroll", measure, true);
-      window.removeEventListener("resize", measure);
-    };
+
+    // Scroll target into view before measuring
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      // Wait for smooth scroll to settle, then measure
+      const scrollTimer = setTimeout(measure, 350);
+
+      // Re-measure on scroll/resize
+      window.addEventListener("scroll", measure, true);
+      window.addEventListener("resize", measure);
+
+      // ResizeObserver to recalculate spotlight when element size changes
+      const resizeObserver = new ResizeObserver(measure);
+      resizeObserver.observe(el);
+
+      return () => {
+        clearTimeout(scrollTimer);
+        window.removeEventListener("scroll", measure, true);
+        window.removeEventListener("resize", measure);
+        resizeObserver.disconnect();
+      };
+    } else {
+      measure();
+      return undefined;
+    }
   }, [step.target, isVirtual]);
 
   /* ── Tooltip positioning ───────────────────────────────────────── */
@@ -299,7 +333,7 @@ const TourOverlay = ({
       <div
         className="fixed inset-0 z-[60] transition-all duration-300"
         style={{
-          backgroundColor: "rgba(0,0,0,0.7)",
+          backgroundColor: "rgba(0,0,0,0.6)",
         }}
         onClick={onSkip}
         data-testid="tour-overlay"
@@ -308,12 +342,12 @@ const TourOverlay = ({
       {/* Spotlight cutout over target element */}
       {rect && !isVirtual && (
         <div
-          className="fixed z-[61] rounded-lg ring-2 ring-blue-400 ring-offset-2 ring-offset-transparent"
+          className="fixed z-[61] rounded-lg ring-2 ring-blue-400 ring-offset-2 ring-offset-transparent animate-pulse"
           style={{
-            top: rect.top - 4,
-            left: rect.left - 4,
-            width: rect.width + 8,
-            height: rect.height + 8,
+            top: rect.top - 10,
+            left: rect.left - 10,
+            width: rect.width + 20,
+            height: rect.height + 20,
             pointerEvents: "none",
             backgroundColor: "transparent",
             boxShadow: "none",

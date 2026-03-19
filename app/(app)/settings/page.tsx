@@ -3,6 +3,7 @@ import { GroupsManager } from "@/components/settings/GroupsManager";
 import { CategoriesManager } from "@/components/settings/CategoriesManager";
 import { InvitePartner } from "@/components/settings/InvitePartner";
 import { CurrencySelector } from "@/components/settings/CurrencySelector";
+import { DefaultSplitRatio } from "@/components/settings/DefaultSplitRatio";
 import { HouseholdSwitcher } from "@/components/settings/HouseholdSwitcher";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { DangerZone } from "@/components/settings/DangerZone";
@@ -12,6 +13,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 export default function SettingsPage() {
   const { user } = useAppStore();
@@ -39,6 +41,9 @@ export default function SettingsPage() {
       {/* Currency */}
       <CurrencySelector />
 
+      {/* Default Split Ratio */}
+      <DefaultSplitRatio />
+
       {/* Install App */}
       <InstallApp />
 
@@ -60,16 +65,19 @@ export default function SettingsPage() {
       {/* Account info + Replay Tour */}
       <div className="px-1 pt-2 border-t border-slate-800 space-y-3">
         <p className="text-xs text-slate-600">Signed in as {user?.email}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleReplayTour}
-          className="gap-1.5 text-slate-400"
-          data-testid="replay-tour-btn"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Replay Feature Tour
-        </Button>
+        <div className="inline-flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReplayTour}
+            className="gap-1.5 text-slate-400"
+            data-testid="replay-tour-btn"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Replay Feature Tour
+          </Button>
+          <InfoTooltip text="Watch the app walkthrough tutorial again to learn about key features." />
+        </div>
       </div>
     </div>
   );

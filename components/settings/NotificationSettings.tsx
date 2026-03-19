@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Bell, BellOff } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -115,8 +116,9 @@ export const NotificationSettings = () => {
           <div className="flex items-center gap-3">
             <Bell className="w-5 h-5 text-slate-400" />
             <div>
-              <Label htmlFor="push-toggle" className="text-sm text-slate-100">
+              <Label htmlFor="push-toggle" className="text-sm text-slate-100 inline-flex items-center gap-1">
                 Push Notifications
+                <InfoTooltip text="Enable push notifications to get alerts when your partner adds expenses or when recurring expenses are due." />
               </Label>
               <p className="text-xs text-slate-400 mt-0.5">
                 {permStatus === "denied"

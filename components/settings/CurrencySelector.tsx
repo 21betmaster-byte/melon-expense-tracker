@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Coins } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "sonner";
 
 const CURRENCIES = [
@@ -50,6 +51,7 @@ export const CurrencySelector = () => {
         <CardTitle className="text-slate-100 flex items-center gap-2 text-base">
           <Coins className="w-4 h-4 text-yellow-400" />
           Currency
+          <InfoTooltip text="The primary currency for your household. Expenses in other currencies will show a currency badge." />
         </CardTitle>
         <CardDescription className="text-slate-400 text-xs">
           All expenses will be shown in this currency.

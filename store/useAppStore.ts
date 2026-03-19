@@ -48,6 +48,9 @@ interface AppState {
   // Multi-household
   allHouseholds: Household[];
 
+  // Hydration
+  hasHydrated: boolean;
+
   // Actions
   setUser: (user: User | null) => void;
   setFirebaseUser: (user: import("firebase/auth").User | null) => void;
@@ -72,6 +75,7 @@ interface AppState {
   updateExpenseInStore: (expenseId: string, data: Partial<Expense>) => void;
   setAllHouseholds: (households: Household[]) => void;
   switchHousehold: (household: Household) => void;
+  setHasHydrated: (hydrated: boolean) => void;
   reset: () => void;
 }
 
@@ -156,6 +160,7 @@ const initialState = {
   categoryMemory: [] as CategoryMemory[],
   settlements: [] as SettlementEvent[],
   allHouseholds: [] as Household[],
+  hasHydrated: false,
 };
 
 // ─── Store ───────────────────────────────────────────────────────────────────
@@ -233,6 +238,7 @@ export const useAppStore = create<AppState>()(
         })),
 
       setAllHouseholds: (allHouseholds) => set({ allHouseholds }),
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
 
       // Switch household: clear all scoped data so useHousehold reloads
       switchHousehold: (household) =>
@@ -260,6 +266,9 @@ export const useAppStore = create<AppState>()(
     {
       name: "melon-store",
       storage: timestampStorage,
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       // Only persist data, skip transient auth / loading / firebaseUser state
       partialize: (state) => ({
         expenses: state.expenses,

@@ -16,9 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, X, Download } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { PillSelect } from "@/components/ui/pill-select";
 import { useAppStore } from "@/store/useAppStore";
 import { exportExpensesToCSV } from "@/lib/utils/export";
-import { calculateSettlement } from "@/lib/utils/settlement";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { formatCurrency, formatMonth, safeToDate } from "@/lib/utils/format";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
@@ -41,6 +43,8 @@ export default function ExpensesPage() {
   const [sortKey, setSortKey] = useState<SortKey>("date-desc");
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [paidByFilter, setPaidByFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [advFilters, setAdvFilters] = useState<AdvancedFilterValues>(EMPTY_ADV_FILTERS);
   const { activeGroup, expenses, categories, members, household, user } = useAppStore();
   const householdCurrency = household?.currency ?? "INR";
@@ -60,6 +64,8 @@ export default function ExpensesPage() {
       setSortKey("date-desc");
       setMonthFilter("all");
       setPaidByFilter("all");
+      setTypeFilter("all");
+      setCategoryFilter([]);
       setAdvFilters(EMPTY_ADV_FILTERS);
       prevGroupId.current = activeGroup?.id;
     }
@@ -105,6 +111,16 @@ export default function ExpensesPage() {
       result = result.filter((exp) => exp.paid_by_user_id === paidByFilter);
     }
 
+    // Stage 2b: Type filter
+    if (typeFilter !== "all") {
+      result = result.filter((exp) => exp.expense_type === typeFilter);
+    }
+
+    // Stage 2c: Category filter
+    if (categoryFilter.length > 0) {
+      result = result.filter((exp) => categoryFilter.includes(exp.category_id));
+    }
+
     // Stage 3: Search filter
     if (debouncedQuery.trim()) {
       const q = debouncedQuery.toLowerCase().trim();
@@ -145,7 +161,7 @@ export default function ExpensesPage() {
     }
 
     return result;
-  }, [expenses, monthFilter, paidByFilter, debouncedQuery, categories, members, advFilters]);
+  }, [expenses, monthFilter, paidByFilter, typeFilter, categoryFilter, debouncedQuery, categories, members, advFilters]);
 
   // Sort filtered expenses
   const sorted = useMemo(() => {
@@ -177,18 +193,59 @@ export default function ExpensesPage() {
     return sorted.reduce((sum, exp) => sum + Math.abs(exp.amount), 0);
   }, [sorted]);
 
-  // Total Owed (settlement calculation on displayed expenses)
-  const settlementResult = useMemo(() => {
-    if (members.length < 2 || !user) {
-      return { netBalance: 0, owedBy: null, owedTo: null, amount: 0, isSettled: true };
+  // This month's spend
+  const thisMonthSpend = useMemo(() => {
+    const now = new Date();
+    return expenses.reduce((sum, exp) => {
+      const d = safeToDate(exp.date);
+      if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+        return sum + Math.abs(exp.amount);
+      }
+      return sum;
+    }, 0);
+  }, [expenses]);
+
+  // Average monthly spend
+  const { avgMonthlySpend, monthsCount, trendDirection } = useMemo(() => {
+    if (expenses.length === 0) return { avgMonthlySpend: 0, monthsCount: 0, trendDirection: null as string | null };
+    const monthTotals = new Map<string, number>();
+    for (const exp of expenses) {
+      const d = safeToDate(exp.date);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      monthTotals.set(key, (monthTotals.get(key) || 0) + Math.abs(exp.amount));
     }
-    const userA = members.find((m) => m.uid === user.uid);
-    const userB = members.find((m) => m.uid !== user.uid);
-    if (!userA || !userB) {
-      return { netBalance: 0, owedBy: null, owedTo: null, amount: 0, isSettled: true };
+    const count = monthTotals.size;
+    const totalAll = Array.from(monthTotals.values()).reduce((a, b) => a + b, 0);
+    const avg = count > 0 ? totalAll / count : 0;
+    const now = new Date();
+    const last = new Date(now);
+    last.setMonth(last.getMonth() - 1);
+    const lastKey = `${last.getFullYear()}-${last.getMonth()}`;
+    const lastTotal = monthTotals.get(lastKey) || 0;
+    const trend = thisMonthSpend > lastTotal ? "up" : thisMonthSpend < lastTotal ? "down" : null;
+    return { avgMonthlySpend: avg, monthsCount: count, trendDirection: trend };
+  }, [expenses, thisMonthSpend]);
+
+  // Top category this month
+  const topCategory = useMemo(() => {
+    const now = new Date();
+    const catTotals = new Map<string, number>();
+    for (const exp of expenses) {
+      const d = safeToDate(exp.date);
+      if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && exp.category_id) {
+        catTotals.set(exp.category_id, (catTotals.get(exp.category_id) || 0) + Math.abs(exp.amount));
+      }
     }
-    return calculateSettlement(sorted, userA, userB);
-  }, [sorted, members, user]);
+    let topId = "";
+    let topAmount = 0;
+    for (const [id, amt] of catTotals) {
+      if (amt > topAmount) { topId = id; topAmount = amt; }
+    }
+    const cat = categories.find((c) => c.id === topId);
+    return cat ? { name: cat.name, amount: topAmount } : null;
+  }, [expenses, categories]);
+
+  const showAvgMetric = monthsCount >= 2;
 
   const handleExport = useCallback(() => {
     if (sorted.length === 0) return;
@@ -213,6 +270,8 @@ export default function ExpensesPage() {
     debouncedQuery.trim().length > 0 ||
     monthFilter !== "all" ||
     paidByFilter !== "all" ||
+    typeFilter !== "all" ||
+    categoryFilter.length > 0 ||
     advFilterActive;
 
   const emptyMessage = isFilterActive
@@ -273,28 +332,51 @@ export default function ExpensesPage() {
         {/* ── All Expenses Tab ── */}
         <TabsContent value="all" className="space-y-4 mt-3">
           {/* Summary Cards Row */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Card className="bg-slate-900 border-slate-800">
               <CardContent className="p-3" data-testid="expenses-total-spent">
-                <p className="text-xs text-slate-500 mb-0.5">Total Spent</p>
-                <p className="text-lg font-semibold text-slate-100">
-                  {formatCurrency(totalSpent, householdCurrency)}
+                <p className="text-xs text-slate-500 mb-0.5 inline-flex items-center gap-1">
+                  {showAvgMetric ? "Avg Monthly" : "Total Spent"}
+                  <InfoTooltip text={showAvgMetric ? "Average monthly spending across all months with data." : "Sum of all expenses matching your current filters."} />
+                </p>
+                <p className="text-base font-semibold text-slate-100">
+                  {formatCurrency(showAvgMetric ? avgMonthlySpend : totalSpent, householdCurrency)}
+                </p>
+                {showAvgMetric && trendDirection && (
+                  <div className={`flex items-center gap-0.5 text-[10px] mt-0.5 ${trendDirection === "down" ? "text-green-400" : "text-red-400"}`}>
+                    {trendDirection === "up" ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    vs last month
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900 border-slate-800">
+              <CardContent className="p-3" data-testid="expenses-this-month">
+                <p className="text-xs text-slate-500 mb-0.5 inline-flex items-center gap-1">
+                  This Month
+                  <InfoTooltip text="Total expenses for the current calendar month." />
+                </p>
+                <p className="text-base font-semibold text-slate-100">
+                  {formatCurrency(thisMonthSpend, householdCurrency)}
                 </p>
               </CardContent>
             </Card>
             <Card className="bg-slate-900 border-slate-800">
-              <CardContent className="p-3" data-testid="expenses-total-owed">
-                <p className="text-xs text-slate-500 mb-0.5">Total Owed</p>
-                <p className="text-lg font-semibold text-slate-100">
-                  {settlementResult.isSettled
-                    ? formatCurrency(0, householdCurrency)
-                    : formatCurrency(settlementResult.amount, householdCurrency)}
-                </p>
+              <CardContent className="p-3" data-testid="expenses-top-category">
+                <p className="text-xs text-slate-500 mb-0.5">Top Category</p>
+                {topCategory ? (
+                  <>
+                    <p className="text-sm font-semibold text-slate-100 truncate">{topCategory.name}</p>
+                    <p className="text-[10px] text-slate-400">{formatCurrency(topCategory.amount, householdCurrency)}</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">—</p>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Filter Row: Month + Paid By + Advanced Filters */}
+          {/* Filter Row: Month + Advanced Filters */}
           <div className="flex flex-wrap items-center gap-2">
             <Select value={monthFilter} onValueChange={(v) => { setMonthFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "month", value: v }); }}>
               <SelectTrigger
@@ -311,36 +393,91 @@ export default function ExpensesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={paidByFilter} onValueChange={(v) => { setPaidByFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "paid_by" }); }}>
-              <SelectTrigger
-                className={`flex-1 min-w-0 h-9 text-sm ${
-                  paidByFilter !== "all"
-                    ? "bg-blue-500/10 border-blue-500/30 text-blue-300"
-                    : "bg-slate-900 border-slate-700"
-                }`}
-                data-testid="paid-by-filter"
-              >
-                <SelectValue>
-                  {paidByFilter === "all"
-                    ? "Paid by: Everyone"
-                    : `Paid by: ${members.find((m) => m.uid === paidByFilter)?.name ?? "?"}`}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Everyone (All Members)</SelectItem>
-                {members.map((m) => (
-                  <SelectItem key={m.uid} value={m.uid}>
-                    Paid by {m.name} {m.uid === user?.uid ? "(You)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <AdvancedFilters
               filters={advFilters}
               onApply={setAdvFilters}
               onClear={() => setAdvFilters(EMPTY_ADV_FILTERS)}
             />
+            {isFilterActive && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMonthFilter("all");
+                  setPaidByFilter("all");
+                  setTypeFilter("all");
+                  setCategoryFilter([]);
+                  setSearchQuery("");
+                  setAdvFilters(EMPTY_ADV_FILTERS);
+                }}
+                className="text-xs text-red-400 hover:text-red-300"
+              >
+                Clear all
+              </button>
+            )}
           </div>
+
+          {/* Type filter pills */}
+          <div>
+            <p className="text-xs text-slate-500 mb-1">
+              Type{typeFilter !== "all" ? " (1)" : ""}
+            </p>
+            <PillSelect
+              options={[
+                { value: "all", label: "All" },
+                { value: "joint", label: "Joint" },
+                { value: "solo", label: "Solo" },
+                { value: "settlement", label: "Settlement" },
+                { value: "paid_for_partner", label: "Paid for Partner" },
+              ]}
+              value={typeFilter}
+              onChange={(v) => {
+                setTypeFilter(v as string);
+                if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "type", value: v as string });
+              }}
+            />
+          </div>
+
+          {/* Paid By filter pills */}
+          <div>
+            <p className="text-xs text-slate-500 mb-1">
+              Paid By{paidByFilter !== "all" ? " (1)" : ""}
+            </p>
+            <PillSelect
+              options={[
+                { value: "all", label: "Everyone" },
+                ...members.map((m) => ({
+                  value: m.uid,
+                  label: m.uid === user?.uid ? `${m.name} (You)` : m.name,
+                })),
+              ]}
+              value={paidByFilter}
+              onChange={(v) => {
+                setPaidByFilter(v as string);
+                if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "paid_by" });
+              }}
+            />
+          </div>
+
+          {/* Category filter pills (multi-select) */}
+          {categories.length > 0 && (
+            <div>
+              <p className="text-xs text-slate-500 mb-1">
+                Category{categoryFilter.length > 0 ? ` (${categoryFilter.length})` : ""}
+              </p>
+              <div className="overflow-x-auto">
+                <PillSelect
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  value={categoryFilter}
+                  onChange={(v) => {
+                    setCategoryFilter(v as string[]);
+                    trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "category" });
+                  }}
+                  multiSelect
+                  variant="purple"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Search + Sort Row */}
           <div className="flex items-center gap-2">

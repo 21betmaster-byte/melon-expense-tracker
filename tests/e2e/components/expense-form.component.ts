@@ -3,7 +3,7 @@ import { Page, Locator, expect } from "@playwright/test";
 export interface ExpenseFormData {
   amount: string;
   description: string;
-  type?: "solo" | "joint" | "settlement";
+  type?: "solo" | "joint" | "settlement" | "paid_for_partner";
   category?: string;
   notes?: string;
   recurring?: boolean;
@@ -88,12 +88,11 @@ export class ExpenseFormComponent {
 
     // Now in Stage 2 — fill remaining fields
 
-    // Type (Radix Select)
+    // Type (PillSelect)
     if (data.type) {
-      await this.page.locator('[data-testid="expense-type-select"]').click();
-      await this.page.waitForTimeout(300);
-      // Radix select items use role="option" or data-value
-      await this.page.getByRole("option", { name: new RegExp(data.type, "i") }).click();
+      const typeSection = this.page.locator('[data-testid="stage2-fields"]');
+      const pill = typeSection.getByRole("radio", { name: new RegExp(data.type, "i") });
+      await pill.click();
     }
 
     // Category
@@ -133,44 +132,43 @@ export class ExpenseFormComponent {
     }
   }
 
-  /** Select a category by name with retry */
+  /** Select a category by name (PillSelect pills) */
   async selectCategory(name: string): Promise<void> {
-    const trigger = this.page.locator('[data-testid="category-select"]');
-    // Retry: categories may load asynchronously
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await trigger.click();
-      await this.page.waitForTimeout(500);
-      const option = this.page.getByRole("option", { name: new RegExp(`^${name}$`, "i") });
-      if (await option.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await option.click();
-        return;
-      }
-      // Close dropdown and retry
-      await this.page.keyboard.press("Escape");
-      await this.page.waitForTimeout(1000);
+    const pill = this.page.getByRole("radio", { name: new RegExp(`^${name}$`, "i") });
+    if (await pill.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await pill.click();
+      return;
     }
-    throw new Error(`Category "${name}" not found after 3 attempts`);
+    // Try checkbox role (for multi-select category pills)
+    const checkbox = this.page.getByRole("checkbox", { name: new RegExp(`^${name}$`, "i") });
+    if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await checkbox.click();
+      return;
+    }
+    throw new Error(`Category "${name}" not found as pill`);
   }
 
-  /** Select the first available category (with retry for async loading) */
+  /** Select the first available category pill (with retry for async loading) */
   async selectFirstCategory(): Promise<void> {
-    const trigger = this.page.locator('[data-testid="category-select"]');
+    const stage2 = this.page.locator('[data-testid="stage2-fields"]');
     for (let attempt = 0; attempt < 3; attempt++) {
-      if (await trigger.isDisabled()) {
-        await this.page.waitForTimeout(1000);
-        continue;
-      }
-      await trigger.click();
-      await this.page.waitForTimeout(500);
-      const firstOption = this.page.locator('[role="option"]').first();
-      if (await firstOption.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await firstOption.click();
+      // Look for category pills (radio or checkbox) that are not already selected
+      const unchecked = stage2.locator(
+        'button[role="radio"][aria-checked="false"], button[role="checkbox"][aria-checked="false"]'
+      );
+      if (await unchecked.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+        await unchecked.last().click();
         return;
       }
-      await this.page.keyboard.press("Escape");
+      // If all are checked, click the last radio pill (categories appear last)
+      const anyPill = stage2.locator('button[role="radio"]');
+      if (await anyPill.last().isVisible({ timeout: 2000 }).catch(() => false)) {
+        await anyPill.last().click();
+        return;
+      }
       await this.page.waitForTimeout(1000);
     }
-    throw new Error("No categories available after 3 attempts");
+    throw new Error("No category pills available after 3 attempts");
   }
 
   /** Create a new inline category */

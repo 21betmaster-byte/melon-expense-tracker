@@ -71,7 +71,10 @@ export function BlogFooter() {
           </div>
         </div>
 
-        <div className="mt-10 border-t border-white/10 pt-6 text-center text-xs text-slate-500">
+        <div
+          className="mt-10 border-t border-white/10 pt-6 text-center text-xs text-slate-500"
+          suppressHydrationWarning
+        >
           &copy; {new Date().getFullYear()} Melon. Built with love for couples
           who care about money.
         </div>

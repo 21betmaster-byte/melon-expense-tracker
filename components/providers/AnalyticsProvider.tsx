@@ -66,14 +66,19 @@ export function AnalyticsProvider({
     };
 
     const onVisibility = () => {
+      if (typeof document === "undefined") return;
       document.hidden ? pause() : start();
     };
 
-    if (!document.hidden) start();
-    document.addEventListener("visibilitychange", onVisibility);
+    if (typeof document !== "undefined" && !document.hidden) start();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
     return () => {
       pause();
-      document.removeEventListener("visibilitychange", onVisibility);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
     };
   }, []);
 

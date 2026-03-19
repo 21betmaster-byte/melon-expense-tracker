@@ -5,6 +5,7 @@ import { switchActiveHousehold } from "@/lib/firebase/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, Home, Users } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "sonner";
 import type { Household } from "@/types";
 
@@ -37,7 +38,10 @@ export const HouseholdSwitcher = () => {
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Home className="w-4 h-4 text-slate-400" />
-          <h3 className="text-sm font-medium text-slate-100">Households</h3>
+          <h3 className="text-sm font-medium text-slate-100 inline-flex items-center gap-1">
+            Households
+            <InfoTooltip text="Your shared household with your partner. Both members see the same expenses and groups." />
+          </h3>
         </div>
         <p className="text-xs text-slate-400">
           You belong to {allHouseholds.length} households. Switch between them below.

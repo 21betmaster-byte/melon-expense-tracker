@@ -7,6 +7,7 @@ import { ExpenseList } from "@/components/expenses/ExpenseList";
 import { AddExpenseDialog } from "@/components/expenses/AddExpenseDialog";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import Link from "next/link";
 import { useAppStore } from "@/store/useAppStore";
 import { incrementEvent } from "@/lib/milestones/tracker";
@@ -52,8 +53,9 @@ export default function DashboardPage() {
       {/* Recent Expenses */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wide">
+          <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wide inline-flex items-center gap-1">
             Recent
+            <InfoTooltip text="Your most recent expenses in this group. Tap any expense to view or edit details." />
           </h3>
           <Link
             href="/expenses"

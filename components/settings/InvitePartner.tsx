@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Check, RefreshCw, Mail, Users, Share2, AlertTriangle } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCountdown, getInviteUrl, shareInvite } from "@/lib/utils/invite";
@@ -186,6 +187,7 @@ export const InvitePartner = () => {
         <CardTitle className="text-slate-100 flex items-center gap-2 text-base">
           <Mail className="w-4 h-4 text-yellow-400" />
           Invite Your Partner
+          <InfoTooltip text="Share the invite link with your partner so they can join your household." />
         </CardTitle>
         <CardDescription className="text-slate-400 text-xs">
           Share the link below. Your partner signs up and pastes it to join.

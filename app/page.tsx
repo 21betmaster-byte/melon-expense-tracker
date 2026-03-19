@@ -129,8 +129,8 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-transparent to-purple-600/10" />
         <div className="absolute top-20 left-1/2 -translate-x-1/2 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl" />
 
-        <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
-          <div className="grid items-center gap-12 md:grid-cols-2">
+        <div className="relative mx-auto max-w-6xl px-4 py-14 md:py-28">
+          <div className="grid items-center gap-8 md:grid-cols-2">
             {/* Left: Copy */}
             <div className="text-center md:text-left">
               <div className="mb-6 inline-flex items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-1.5 text-sm text-blue-400">
@@ -182,7 +182,7 @@ export default function HomePage() {
       </section>
 
       {/* ── App Showcase ──────────────────────────────────────────── */}
-      <section className="border-t border-white/5 py-20 overflow-hidden">
+      <section className="border-t border-white/5 py-14 overflow-hidden">
         <div className="mx-auto max-w-6xl px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-white md:text-4xl">
@@ -195,7 +195,7 @@ export default function HomePage() {
           </div>
 
           {/* Showcase 1: Smart Splitting */}
-          <div className="grid items-center gap-12 md:grid-cols-2 mb-24">
+          <div className="grid items-center gap-8 md:grid-cols-2 mb-16">
             <div className="flex justify-center md:order-2">
               <SplitPreview />
             </div>
@@ -227,7 +227,7 @@ export default function HomePage() {
           </div>
 
           {/* Showcase 2: Analytics */}
-          <div className="grid items-center gap-12 md:grid-cols-2 mb-24">
+          <div className="grid items-center gap-8 md:grid-cols-2 mb-16">
             <div className="flex justify-center">
               <AnalyticsPreview />
             </div>
@@ -260,7 +260,7 @@ export default function HomePage() {
           </div>
 
           {/* Showcase 3: Expense Management */}
-          <div className="grid items-center gap-12 md:grid-cols-2">
+          <div className="grid items-center gap-8 md:grid-cols-2">
             <div className="flex justify-center md:order-2">
               <ExpensesPreview />
             </div>
@@ -295,7 +295,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Pain Points / Problems We Solve ───────────────────────── */}
-      <section className="border-t border-white/5 py-20 bg-gradient-to-b from-transparent via-blue-950/5 to-transparent">
+      <section className="border-t border-white/5 py-14 bg-gradient-to-b from-transparent via-blue-950/5 to-transparent">
         <div className="mx-auto max-w-5xl px-4">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-bold text-white md:text-4xl">
@@ -327,7 +327,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Features ────────────────────────────────────────────────── */}
-      <section id="features" className="border-t border-white/5 py-20">
+      <section id="features" className="border-t border-white/5 py-14">
         <div className="mx-auto max-w-5xl px-4">
           <div className="text-center">
             <h2 className="text-3xl font-bold text-white md:text-4xl">
@@ -361,7 +361,7 @@ export default function HomePage() {
       </section>
 
       {/* ── How It Works ───────────────────────────────────────────── */}
-      <section className="border-t border-white/5 py-20">
+      <section className="border-t border-white/5 py-14">
         <div className="mx-auto max-w-5xl px-4">
           <div className="text-center">
             <h2 className="text-3xl font-bold text-white md:text-4xl">
@@ -403,7 +403,7 @@ export default function HomePage() {
 
       {/* ── Blog Preview ───────────────────────────────────────────── */}
       {recentPosts.length > 0 && (
-        <section className="border-t border-white/5 py-20">
+        <section className="border-t border-white/5 py-14">
           <div className="mx-auto max-w-5xl px-4">
             <div className="mb-10 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white md:text-3xl">
@@ -427,7 +427,7 @@ export default function HomePage() {
       )}
 
       {/* ── Final CTA ──────────────────────────────────────────────── */}
-      <section className="border-t border-white/5 py-20">
+      <section className="border-t border-white/5 py-14">
         <div className="mx-auto max-w-3xl px-4 text-center">
           <h2 className="text-3xl font-bold text-white md:text-4xl">
             Ready to get on the same page?

@@ -16,6 +16,7 @@ export interface Household {
   members: string[];
   invite_code: string;
   invite_expires_at: Timestamp;
+  default_split_ratio?: number; // 0-1 decimal, e.g. 0.7 = payer covers 70%
 }
 
 export interface ExpenseGroup {
@@ -39,7 +40,7 @@ export interface Goal {
   current_amount: number;
 }
 
-export type ExpenseType = "solo" | "joint" | "settlement";
+export type ExpenseType = "solo" | "joint" | "settlement" | "paid_for_partner";
 export type ExpenseSource = "manual" | "email" | "sms";
 
 export interface Expense {

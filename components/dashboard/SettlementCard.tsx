@@ -15,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { CheckCircle, ArrowRight, Handshake, History } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
 import { SETTLEMENT_VIEWED, SETTLED_UP } from "@/lib/analytics/events";
@@ -116,14 +117,18 @@ export const SettlementCard = () => {
           <div className="flex items-center gap-3 text-green-400">
             <CheckCircle className="w-8 h-8" />
             <div>
-              <p className="font-semibold text-lg">All settled up</p>
+              <p className="font-semibold text-lg inline-flex items-center gap-1">
+                All settled up
+                <InfoTooltip text="Shows the net amount one partner owes the other across all expenses in this group. Settle up by adding a Settlement type expense." />
+              </p>
               <p className="text-sm text-slate-400">No outstanding balance</p>
             </div>
           </div>
         ) : (
           <div>
-            <p className="text-xs text-slate-400 mb-2 uppercase tracking-wide">
+            <p className="text-xs text-slate-400 mb-2 uppercase tracking-wide inline-flex items-center gap-1">
               Settlement
+              <InfoTooltip text="Shows the net amount one partner owes the other across all expenses in this group. Settle up by adding a Settlement type expense." />
             </p>
             <div className="flex items-center gap-3">
               <span className="font-medium text-slate-300">

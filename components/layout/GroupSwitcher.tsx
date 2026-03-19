@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronDown, Layers, Plus, Check, Archive, RotateCcw } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   Tooltip,
   TooltipContent,
@@ -142,8 +143,9 @@ export const GroupSwitcher = () => {
         align="start"
         className="bg-slate-900 border-slate-700 min-w-[200px]"
       >
-        <DropdownMenuLabel className="text-slate-400 text-xs">
+        <DropdownMenuLabel className="text-slate-400 text-xs inline-flex items-center gap-1">
           Expense Groups
+          <InfoTooltip text="Organize expenses into groups like 'Day to Day', 'Travel', or 'Home'. Each group tracks its own expenses and settlement balance." />
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-slate-700" />
 

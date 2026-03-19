@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Layers } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
 import { GROUP_CREATED } from "@/lib/analytics/events";
@@ -47,6 +48,7 @@ export const GroupsManager = () => {
         <CardTitle className="text-slate-100 flex items-center gap-2 text-base">
           <Layers className="w-4 h-4 text-blue-400" />
           Expense Groups
+          <InfoTooltip text="Manage your expense groups here. Create new groups for different spending contexts (e.g., vacations, monthly bills)." />
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">

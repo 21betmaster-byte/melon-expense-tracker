@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { deleteExpense } from "@/lib/firebase/firestore";
 import { useAppStore } from "@/store/useAppStore";
@@ -24,14 +24,29 @@ import {
 } from "@/components/ui/dialog";
 import { ExpenseForm } from "./ExpenseForm";
 import type { Expense } from "@/types";
-import { ChevronDown, ChevronUp, Clock, Pencil, Repeat, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Clock, Repeat, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
 import { EXPENSE_DELETED } from "@/lib/analytics/events";
+import { motion, useMotionValue, useTransform, type PanInfo } from "framer-motion";
 
 interface Props {
   expense: Expense;
 }
+
+const TYPE_COLORS: Record<string, string> = {
+  joint: "text-blue-400 border-blue-800",
+  solo: "text-slate-400 border-slate-700",
+  settlement: "text-green-400 border-green-800",
+  paid_for_partner: "text-orange-400 border-orange-800",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  joint: "Joint",
+  solo: "Solo",
+  settlement: "Settlement",
+  paid_for_partner: "Paid for Partner",
+};
 
 export const ExpenseCard = ({ expense }: Props) => {
   const { categories, members, household, user, removeExpense } = useAppStore();
@@ -42,39 +57,43 @@ export const ExpenseCard = ({ expense }: Props) => {
 
   const category = categories.find((c) => c.id === expense.category_id);
   const paidBy = members.find((m) => m.uid === expense.paid_by_user_id);
-  const createdBy = expense.created_by
-    ? members.find((m) => m.uid === expense.created_by)
-    : null;
   const householdCurrency = household?.currency ?? "INR";
-
-  // Use per-expense currency if set, otherwise fall back to household currency
   const displayCurrency = expense.currency ?? householdCurrency;
   const showCurrencyBadge = !!expense.currency && expense.currency !== householdCurrency;
+  const typeColor = TYPE_COLORS[expense.expense_type] ?? "";
 
-  // Show "Added by" only when creator differs from payer and created_by exists
-  const showAddedBy =
-    !!expense.created_by &&
-    expense.created_by !== expense.paid_by_user_id &&
-    !!createdBy;
+  // Swipe-to-delete
+  const x = useMotionValue(0);
+  const deleteOpacity = useTransform(x, [-150, -80, 0], [1, 1, 0]);
+  const swipeRef = useRef(false);
+  const SWIPE_THRESHOLD = 80;
+  const AUTO_DELETE_THRESHOLD = 150;
 
-  const typeColorMap: Record<string, string> = {
-    joint: "text-blue-400 border-blue-800",
-    solo: "text-slate-400 border-slate-700",
-    settlement: "text-green-400 border-green-800",
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    if (info.offset.x < -AUTO_DELETE_THRESHOLD) {
+      swipeRef.current = true;
+      setShowDeleteDialog(true);
+    } else if (info.offset.x < -SWIPE_THRESHOLD) {
+      // Snap to show delete button
+    }
   };
-  const typeColor = typeColorMap[expense.expense_type] ?? "";
+
+  const handleCardClick = () => {
+    if (swipeRef.current) {
+      swipeRef.current = false;
+      return;
+    }
+    if (expense._pending) return;
+    setShowEditDialog(true);
+  };
 
   const handleDelete = async () => {
     if (!user?.household_id || !expense.id) return;
-
     setDeleting(true);
     try {
-      // Optimistic removal from store
       removeExpense(expense.id);
       setShowDeleteDialog(false);
       toast.success("Expense deleted.");
-
-      // Actual Firestore delete
       await deleteExpense(user.household_id, expense.id);
       trackEvent(EXPENSE_DELETED, { expense_id: expense.id });
     } catch {
@@ -84,160 +103,180 @@ export const ExpenseCard = ({ expense }: Props) => {
     }
   };
 
+  // Split ratio display
+  const splitInfo = (() => {
+    if (expense.expense_type === "paid_for_partner") {
+      return "Partner owes full amount";
+    }
+    if (expense.expense_type === "joint" && paidBy) {
+      const payerPct = Math.round(expense.split_ratio * 100);
+      const partnerPct = 100 - payerPct;
+      const isCurrentUser = paidBy.uid === user?.uid;
+      const partnerMember = members.find((m) => m.uid !== expense.paid_by_user_id);
+      const youLabel = isCurrentUser ? "You" : paidBy.name;
+      const partnerLabel = isCurrentUser
+        ? (partnerMember?.name ?? "Partner")
+        : "You";
+      const youPct = isCurrentUser ? payerPct : partnerPct;
+      const partnerPctVal = isCurrentUser ? partnerPct : payerPct;
+      return `${youLabel}: ${youPct}% · ${partnerLabel}: ${partnerPctVal}%`;
+    }
+    return null;
+  })();
+
   return (
     <>
-      <Card
-        className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-colors"
-        data-testid="expense-card"
-      >
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-medium text-slate-100 truncate">
-                  {expense.description || category?.name || "Expense"}
+      <div className="relative overflow-hidden rounded-lg">
+        {/* Delete button behind the card (swipe reveals) */}
+        <motion.div
+          className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-600 px-6"
+          style={{ opacity: deleteOpacity }}
+        >
+          <Trash2 className="w-5 h-5 text-white" />
+        </motion.div>
+
+        <motion.div
+          drag="x"
+          dragConstraints={{ left: -150, right: 0 }}
+          dragElastic={0.1}
+          onDragEnd={handleDragEnd}
+          style={{ x }}
+          className="relative"
+        >
+          <Card
+            className="bg-slate-900 border-slate-800 cursor-pointer hover:bg-slate-800/50 transition-colors"
+            data-testid="expense-card"
+            onClick={handleCardClick}
+          >
+            <CardContent className="p-3">
+              {/* Row 1: Description + Amount */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <p className="font-medium text-slate-100 truncate text-sm">
+                    {expense.description || category?.name || "Expense"}
+                  </p>
+                  {expense._pending && (
+                    <Clock
+                      className="w-3 h-3 text-amber-400 shrink-0"
+                      data-testid="pending-indicator"
+                    />
+                  )}
+                </div>
+                <p
+                  className={`font-semibold text-base shrink-0 ${
+                    expense.amount < 0 ? "text-amber-400" : "text-white"
+                  }`}
+                >
+                  {expense.amount < 0 ? "-" : ""}
+                  {formatCurrency(expense.amount, displayCurrency)}
                 </p>
-                {expense._pending && (
-                  <div
-                    className="flex items-center gap-1 text-xs text-amber-400"
-                    data-testid="pending-indicator"
-                  >
-                    <Clock className="w-3 h-3" />
-                    <span>Pending Sync</span>
-                  </div>
-                )}
               </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-xs text-slate-400">
+
+              {/* Row 2: Metadata badges */}
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span className="text-[11px] text-slate-500">
                   {formatDate(expense.date)}
                 </span>
                 {category && (
                   <Badge
                     variant="outline"
-                    className="text-xs text-slate-400 border-slate-700"
+                    className="text-[11px] text-slate-400 border-slate-700 py-0 px-1.5"
                   >
                     {category.name}
                   </Badge>
                 )}
                 <Badge
                   variant="outline"
-                  className={`text-xs ${typeColor}`}
+                  className={`text-[11px] py-0 px-1.5 ${typeColor}`}
                 >
-                  {expense.expense_type}
+                  {TYPE_LABELS[expense.expense_type] ?? expense.expense_type}
                 </Badge>
                 {showCurrencyBadge && (
                   <Badge
                     variant="outline"
-                    className="text-xs text-amber-400 border-amber-800"
+                    className="text-[11px] text-amber-400 border-amber-800 py-0 px-1.5"
                     data-testid="expense-currency-badge"
                   >
                     {expense.currency}
                   </Badge>
                 )}
                 {expense.is_recurring && (
+                  <Repeat
+                    className="w-3 h-3 text-purple-400"
+                    data-testid="recurring-indicator"
+                  />
+                )}
+                {expense.amount < 0 && (
                   <Badge
                     variant="outline"
-                    className="text-xs text-purple-400 border-purple-800 gap-1"
-                    data-testid="recurring-indicator"
+                    className="text-[10px] text-amber-400 border-amber-800 py-0 px-1"
                   >
-                    <Repeat className="w-3 h-3" />
-                    {expense.recurring_frequency
-                      ? expense.recurring_frequency.charAt(0).toUpperCase() + expense.recurring_frequency.slice(1)
-                      : "Monthly"}
+                    Refund
                   </Badge>
                 )}
-              </div>
-              {paidBy && expense.expense_type === "joint" && (() => {
-                const payerPct = Math.round(expense.split_ratio * 100);
-                const partnerPct = 100 - payerPct;
-                const partner = members.find((m) => m.uid !== expense.paid_by_user_id);
-                return (
-                  <p className="text-xs text-slate-400 mt-1">
-                    {paidBy.name} pays {payerPct}%
-                    {partner ? ` · ${partner.name} pays ${partnerPct}%` : ""}
-                  </p>
-                );
-              })()}
-              {paidBy && expense.expense_type !== "joint" && (
-                <p className="text-xs text-slate-400 mt-1">
-                  Paid by {paidBy.name}
-                </p>
-              )}
-              {showAddedBy && (
-                <p
-                  className="text-xs text-slate-400 mt-0.5"
-                  data-testid="expense-added-by"
-                >
-                  Added by {createdBy!.name}
-                </p>
-              )}
-              {expense.notes && (
-                <button
+                {expense.notes && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowNotes(!showNotes);
+                    }}
+                    className="flex items-center gap-0.5 text-[11px] text-slate-500 hover:text-slate-400"
+                    data-testid="expense-notes-toggle"
+                  >
+                    Notes
+                    {showNotes ? (
+                      <ChevronUp className="w-2.5 h-2.5" />
+                    ) : (
+                      <ChevronDown className="w-2.5 h-2.5" />
+                    )}
+                  </button>
+                )}
+                {/* Desktop delete on hover */}
+                <Button
                   type="button"
-                  onClick={() => setShowNotes(!showNotes)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 mt-1"
-                  data-testid="expense-notes-toggle"
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 text-slate-600 hover:text-red-400 ml-auto hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity"
+                  disabled={!!expense._pending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeleteDialog(true);
+                  }}
+                  data-testid="delete-expense-btn"
+                  aria-label="Delete expense"
                 >
-                  {showNotes ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                  Notes
-                </button>
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+
+              {/* Row 3: Split ratio (joint / paid_for_partner only) */}
+              {splitInfo && (
+                <p
+                  className={`text-[11px] mt-1 ${
+                    expense.expense_type === "paid_for_partner"
+                      ? "text-orange-400"
+                      : "text-slate-500"
+                  }`}
+                >
+                  {splitInfo}
+                </p>
               )}
+
+              {/* Collapsible notes */}
               {showNotes && expense.notes && (
                 <p
-                  className="text-xs text-slate-400 mt-1 bg-slate-800 rounded px-2 py-1"
+                  className="text-[11px] text-slate-400 mt-1.5 bg-slate-800 rounded px-2 py-1"
                   data-testid="expense-notes-content"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {expense.notes}
                 </p>
               )}
-            </div>
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <p
-                className={`font-semibold text-lg ${
-                  expense.amount < 0 ? "text-amber-400" : "text-slate-100"
-                }`}
-              >
-                {expense.amount < 0 ? "-" : ""}
-                {formatCurrency(expense.amount, displayCurrency)}
-              </p>
-              {expense.amount < 0 && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] text-amber-400 border-amber-800"
-                >
-                  Refund
-                </Badge>
-              )}
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 w-9 min-h-[44px] min-w-[44px] p-0 text-slate-400 hover:text-blue-400"
-                  disabled={!!expense._pending}
-                  onClick={() => setShowEditDialog(true)}
-                  data-testid="edit-expense-btn"
-                  aria-label="Edit expense"
-                >
-                  <Pencil className="w-4 h-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 w-9 min-h-[44px] min-w-[44px] p-0 text-slate-400 hover:text-red-400"
-                  disabled={!!expense._pending}
-                  onClick={() => setShowDeleteDialog(true)}
-                  data-testid="delete-expense-btn"
-                  aria-label="Delete expense"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
 
       {/* Edit Expense Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>

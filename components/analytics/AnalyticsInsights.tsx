@@ -1,6 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { generateInsights } from "@/lib/utils/analytics";
 import { formatCurrency } from "@/lib/utils/format";
 import type { Expense, MonthlyData, CategoryMonthData, Category } from "@/types";
@@ -35,10 +36,11 @@ export const AnalyticsInsights = ({
   if (insights.length === 0) return null;
 
   return (
-    <Card className="bg-slate-900 border-slate-800" data-testid="analytics-insights">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-slate-400 uppercase tracking-wide">
-          Insights
+    <Card className="bg-slate-900 border-slate-800 pt-3 gap-2" data-testid="analytics-insights">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-sm font-medium text-slate-400 uppercase tracking-wide inline-flex items-center gap-1">
+          Spending Insights
+          <InfoTooltip text="AI-generated insights about your spending patterns and trends. Updated as you add more expenses." />
         </CardTitle>
       </CardHeader>
       <CardContent>

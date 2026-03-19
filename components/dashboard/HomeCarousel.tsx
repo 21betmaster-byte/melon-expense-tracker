@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
@@ -9,11 +9,6 @@ import { toast } from "sonner";
 import type { CarouselCard as CardConfig } from "@/lib/carousel/cards";
 
 const NEW_USER_DAYS = 7;
-
-function isDismissed(cardId: string): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(`carousel_dismissed_${cardId}`) === "true";
-}
 
 function dismissCard(cardId: string) {
   if (typeof window !== "undefined") {
@@ -28,17 +23,29 @@ export const HomeCarousel = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [, forceUpdate] = useState(0);
+  // Track dismissed cards in state — read from localStorage only on mount
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const dismissed = new Set<string>();
+    for (const card of carouselCards) {
+      if (localStorage.getItem(`carousel_dismissed_${card.id}`) === "true") {
+        dismissed.add(card.id);
+      }
+    }
+    setDismissedIds(dismissed);
+  }, []);
 
   // Determine which cards to show
-  const isNewUser = (() => {
+  const isNewUser = useMemo(() => {
     const createdAt = household?.created_at;
     if (!createdAt) return false;
     const createdMs = createdAt.toMillis();
     return Date.now() - createdMs < NEW_USER_DAYS * 24 * 60 * 60 * 1000;
-  })();
+  }, [household?.created_at]);
 
-  const visibleCards = carouselCards.filter((card) => {
-    if (isDismissed(card.id)) return false;
+  const visibleCards = useMemo(() => carouselCards.filter((card) => {
+    if (dismissedIds.has(card.id)) return false;
     switch (card.showCondition) {
       case "not-installed":
         return !isInstalled;
@@ -50,7 +57,7 @@ export const HomeCarousel = () => {
       default:
         return true;
     }
-  });
+  }), [dismissedIds, isInstalled, members.length, isNewUser]);
 
   // Scroll observer for pagination dots
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -96,7 +103,7 @@ export const HomeCarousel = () => {
 
   const handleDismiss = (card: CardConfig) => {
     dismissCard(card.id);
-    forceUpdate((n) => n + 1);
+    setDismissedIds((prev) => new Set(prev).add(card.id));
   };
 
   if (visibleCards.length === 0) return null;

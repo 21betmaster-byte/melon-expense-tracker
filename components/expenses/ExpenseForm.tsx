@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -42,9 +42,11 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Check, Repeat, Loader2 } from "lucide-react";
+import { Plus, Check, Repeat, Loader2, CalendarClock } from "lucide-react";
 import type { Expense, ExpenseType } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { PillSelect, type PillOption } from "@/components/ui/pill-select";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { sendPushNotification } from "@/lib/notifications/sendPushNotification";
 import {
   buildExpenseCreatedPayload,
@@ -58,7 +60,7 @@ const SUPPORTED_CURRENCIES = [
 const formSchema = z.object({
   amount: z.string().min(1, "Amount is required"),
   description: z.string().min(1, "Description is required").max(100, "Max 100 characters"),
-  expense_type: z.enum(["solo", "joint", "settlement"]),
+  expense_type: z.enum(["solo", "joint", "settlement", "paid_for_partner"]),
   paid_by_user_id: z.string().min(1, "Payer is required"),
   split_pct: z.number().min(0).max(100), // payer's share in %
   category_id: z.string().min(1, "Category is required"),
@@ -85,6 +87,7 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
     categories,
     activeGroup,
     categoryMemory,
+    expenses: storeExpenses,
     addPendingExpense,
     resolvePendingExpense,
     updateExpenseInStore,
@@ -161,12 +164,15 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
         recurring_frequency: editExpense.recurring_frequency ?? "monthly",
       };
     }
+    const defaultSplit = household?.default_split_ratio != null
+      ? Math.round(household.default_split_ratio * 100)
+      : 50;
     return {
       amount: "",
       description: "",
       expense_type: "joint",
       paid_by_user_id: user?.uid ?? "",
-      split_pct: 50,
+      split_pct: defaultSplit,
       category_id: "",
       date: new Date().toISOString().split("T")[0],
       currency_override: currency,
@@ -188,6 +194,13 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
   const paidByUserId = form.watch("paid_by_user_id");
   const splitPct = form.watch("split_pct");
   const categoryIdValue = form.watch("category_id");
+
+  // When "Paid for Partner" is selected, auto-set split to 0%
+  useEffect(() => {
+    if (expenseType === "paid_for_partner") {
+      form.setValue("split_pct", 0);
+    }
+  }, [expenseType, form]);
 
   // Apply initial values from template selection (only in create mode)
   useEffect(() => {
@@ -274,6 +287,37 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
   // The other member (partner)
   const partner = members.find((m) => m.uid !== user?.uid);
 
+  // Category frequency: sort by usage count in current group
+  const sortedCategoryPills = useMemo((): PillOption[] => {
+    const freq: Record<string, number> = {};
+    for (const exp of storeExpenses) {
+      if (exp.category_id) {
+        freq[exp.category_id] = (freq[exp.category_id] || 0) + 1;
+      }
+    }
+    const sorted = [...categories].sort(
+      (a, b) => (freq[b.id] || 0) - (freq[a.id] || 0)
+    );
+    return sorted.map((c) => ({ value: c.id, label: c.name }));
+  }, [categories, storeExpenses]);
+
+  // Type pills
+  const typePills: PillOption[] = useMemo(() => [
+    { value: "joint", label: "Joint" },
+    { value: "solo", label: "Solo" },
+    { value: "settlement", label: "Settlement" },
+    { value: "paid_for_partner", label: "Paid for Partner" },
+  ], []);
+
+  // Paid By pills
+  const paidByPills: PillOption[] = useMemo(() =>
+    members.map((m) => ({
+      value: m.uid,
+      label: m.uid === user?.uid ? `${m.name} (You)` : m.name,
+    })),
+    [members, user?.uid]
+  );
+
   // Split label: "Shivam pays 70% · Jhanvi pays 30%"
   const splitLabel = (() => {
     if (expenseType !== "joint") return null;
@@ -329,6 +373,35 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
     },
     [stage, advanceToStage2]
   );
+
+  // Handle blur on Amount — format and maybe advance
+  const handleAmountBlur = useCallback(() => {
+    if (stage !== 1 || transitioning) return;
+    const raw = form.getValues("amount");
+    if (raw && raw.trim() !== "") {
+      const num = parseFloat(raw);
+      if (!isNaN(num) && num > 0) {
+        form.setValue("amount", num.toFixed(2));
+      }
+      const desc = form.getValues("description");
+      if (desc && desc.trim() !== "") {
+        advanceToStage2();
+      }
+    }
+  }, [stage, transitioning, form, advanceToStage2]);
+
+  // Handle blur on Description — trim and maybe advance
+  const handleDescriptionBlur = useCallback(() => {
+    if (stage !== 1 || transitioning) return;
+    const desc = form.getValues("description");
+    if (desc && desc.trim() !== "") {
+      form.setValue("description", desc.trim());
+      const amount = form.getValues("amount");
+      if (amount && amount.trim() !== "" && parseFloat(amount) > 0) {
+        advanceToStage2();
+      }
+    }
+  }, [stage, transitioning, form, advanceToStage2]);
 
   // Inline category creation handler
   const handleCreateCategory = async () => {
@@ -492,12 +565,15 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
     const memoryCatId = values.category_id;
 
     onSuccess?.();
+    const resetSplit = household?.default_split_ratio != null
+      ? Math.round(household.default_split_ratio * 100)
+      : 50;
     form.reset({
       amount: "",
       description: "",
       expense_type: "joint",
       paid_by_user_id: user?.uid ?? "",
-      split_pct: 50,
+      split_pct: resetSplit,
       category_id: "",
       date: new Date().toISOString().split("T")[0],
       currency_override: currency,
@@ -597,7 +673,10 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
           name="amount"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Amount ({currencySymbol})</FormLabel>
+              <FormLabel className="flex items-center gap-1.5">
+                    Amount ({currencySymbol})
+                    <InfoTooltip text="Enter the total amount spent. This is the full expense amount before any split." />
+                  </FormLabel>
               <FormControl>
                 <Input
                   {...field}
@@ -606,6 +685,7 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                   placeholder="0.00"
                   data-testid="amount-input"
                   onKeyDown={handleStage1KeyDown}
+                  onBlur={(e) => { field.onBlur(); handleAmountBlur(); }}
                   autoFocus={!isEditMode}
                 />
               </FormControl>
@@ -625,7 +705,10 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Description</FormLabel>
+              <FormLabel className="flex items-center gap-1.5">
+                    Description
+                    <InfoTooltip text="A short description helps you identify this expense later. It's also used for auto-categorization of future expenses." />
+                  </FormLabel>
               <FormControl>
                 <Input
                   {...field}
@@ -633,6 +716,7 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                   maxLength={100}
                   data-testid="description-input"
                   onKeyDown={handleStage1KeyDown}
+                  onBlur={(e) => { field.onBlur(); handleDescriptionBlur(); }}
                 />
               </FormControl>
               <p className="text-xs text-slate-400 mt-1">Helps with auto-categorization next time</p>
@@ -649,7 +733,7 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
         {/* Stage 1 hint */}
         {stage === 1 && !transitioning && (
           <p className="text-xs text-slate-500 text-center" data-testid="stage1-hint">
-            Press Enter to continue
+            Press Enter or tap outside to continue
           </p>
         )}
 
@@ -670,154 +754,141 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
             }`}
             data-testid="stage2-fields"
           >
-            {/* Expense Type */}
+            {/* Expense Type — pills */}
             <FormField
               control={form.control}
               name="expense_type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Type</FormLabel>
-                  <Select onValueChange={(v) => { field.onChange(v); trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "expense_type" }); }} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="expense-type-select">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="joint">Joint (shared)</SelectItem>
-                      <SelectItem value="solo">Solo (personal)</SelectItem>
-                      <SelectItem value="settlement">Settlement</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormLabel className="flex items-center gap-1.5">
+                    Type
+                    <InfoTooltip text="Joint: Shared between you and your partner (split based on ratio). Solo: Only for you, not shared. Settlement: A payment to settle what's owed. Paid for Partner: You paid but your partner owes the full amount." />
+                  </FormLabel>
+                  <PillSelect
+                    options={typePills}
+                    value={field.value}
+                    onChange={(v) => {
+                      field.onChange(v as string);
+                      trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "expense_type" });
+                    }}
+                  />
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* Paid By */}
+            {/* Paid By — pills */}
             <FormField
               control={form.control}
               name="paid_by_user_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Paid By</FormLabel>
-                  <Select onValueChange={(v) => { field.onChange(v); trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "paid_by" }); }} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="paid-by-select">
-                        <SelectValue placeholder="Who paid?" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {members.map((m) => (
-                        <SelectItem key={m.uid} value={m.uid}>
-                          {m.name} {m.uid === user?.uid ? "(You)" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel className="flex items-center gap-1.5">
+                    Paid By
+                    <InfoTooltip text="Who actually paid for this expense? This affects the settlement calculation." />
+                  </FormLabel>
+                  <PillSelect
+                    options={paidByPills}
+                    value={field.value}
+                    onChange={(v) => {
+                      field.onChange(v as string);
+                      trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "paid_by" });
+                    }}
+                  />
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* Split % slider — only for joint expenses */}
+            {/* Split % slider — only for joint expenses (hidden for paid_for_partner) */}
             {expenseType === "joint" && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <FormField
-                      control={form.control}
-                      name="split_pct"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center justify-between">
-                            <FormLabel>Payer&apos;s Share</FormLabel>
-                            <span className="text-blue-400 font-semibold text-sm">
-                              {field.value}%
-                            </span>
-                          </div>
-                          <FormControl>
-                            <Slider
-                              min={0}
-                              max={100}
-                              step={5}
-                              value={[field.value]}
-                              onValueChange={([v]) => field.onChange(v)}
-                              className="mt-1"
-                              data-testid="split-ratio-input"
-                            />
-                          </FormControl>
-                          {splitLabel && (
-                            <p className="text-xs text-slate-400 mt-1">{splitLabel}</p>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Adjust how the expense is split between you and your partner</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <FormField
+                control={form.control}
+                name="split_pct"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between">
+                      <FormLabel className="flex items-center gap-1.5">
+                        Payer&apos;s Share
+                        <InfoTooltip text="Drag to set how this expense is split. Example: 70% means the payer covers 70% and the partner covers 30%." />
+                      </FormLabel>
+                      <span className="text-blue-400 font-semibold text-sm">
+                        {field.value}%
+                      </span>
+                    </div>
+                    <FormControl>
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={[field.value]}
+                        onValueChange={([v]) => field.onChange(v)}
+                        className="mt-1"
+                        data-testid="split-ratio-input"
+                      />
+                    </FormControl>
+                    {splitLabel && (
+                      <p className="text-xs text-slate-400 mt-1">{splitLabel}</p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+            {expenseType === "paid_for_partner" && (
+              <p className="text-xs text-orange-400">
+                Partner owes the full amount
+              </p>
             )}
 
-            {/* Category */}
+            {/* Category — pills with show more/less and "+ New" */}
             <FormField
               control={form.control}
               name="category_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
+                  <FormLabel className="flex items-center gap-1.5">
                     Category
-                    {categorySource === "memory" && field.value === suggestedCategoryId && (
-                      <span className="ml-2 text-xs text-purple-400">Remembered</span>
-                    )}
-                    {categorySource === "auto" && field.value === suggestedCategoryId && (
-                      <span className="ml-2 text-xs text-green-400">Auto-detected</span>
-                    )}
+                    <InfoTooltip text="Categorize your expense for better tracking and analytics. Categories are shared across your household." />
                   </FormLabel>
-                  <Select onValueChange={handleCategoryChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="category-select" disabled={householdLoading || !activeGroup}>
-                        <SelectValue placeholder={
-                          householdLoading
-                            ? "Loading categories…"
-                            : !activeGroup
-                            ? "No group selected"
-                            : categories.length === 0
-                            ? "No categories — create one below"
-                            : "Select category"
-                        } />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {householdLoading || !activeGroup ? (
+                    <p className="text-xs text-slate-500">
+                      {householdLoading ? "Loading categories…" : "No group selected"}
+                    </p>
+                  ) : (
+                    <PillSelect
+                      options={[
+                        ...sortedCategoryPills,
+                        { value: "__new__", label: "+ New", icon: <Plus className="w-3 h-3" /> },
+                      ]}
+                      value={field.value}
+                      onChange={(v) => {
+                        const val = v as string;
+                        if (val === "__new__") {
+                          setShowInlineCategory(true);
+                          return;
+                        }
+                        handleCategoryChange(val);
+                      }}
+                      variant="purple"
+                      maxRows={2}
+                      showMoreThreshold={8}
+                      autoIndicator={
+                        categorySource === "memory" && field.value === suggestedCategoryId
+                          ? { type: "memory", label: "Remembered" }
+                          : categorySource === "auto" && field.value === suggestedCategoryId
+                          ? { type: "auto", label: "Auto-detected" }
+                          : null
+                      }
+                    />
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
             />
 
             {/* Inline Category Creation */}
-            {!showInlineCategory ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-0"
-                onClick={() => setShowInlineCategory(true)}
-                data-testid="inline-category-trigger"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Create new category
-              </Button>
-            ) : (
+            {showInlineCategory && (
               <div className="flex items-center gap-1.5">
                 <Input
                   value={newCategoryName}
@@ -831,6 +902,10 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                     if (e.key === "Enter" && newCategoryName.trim()) {
                       e.preventDefault();
                       handleCreateCategory();
+                    }
+                    if (e.key === "Escape") {
+                      setShowInlineCategory(false);
+                      setNewCategoryName("");
                     }
                   }}
                 />
@@ -848,14 +923,17 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
               </div>
             )}
 
-            {/* Date + Currency — side by side */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Date + Currency — stacked on mobile, side by side on sm+ */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField
                 control={form.control}
                 name="date"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date</FormLabel>
+                    <FormLabel className="flex items-center gap-1.5">
+                      Date
+                      <InfoTooltip text="When the expense occurred. Defaults to today. Cannot be a future date." />
+                    </FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -875,17 +953,21 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                 name="currency_override"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Currency</FormLabel>
+                    <FormLabel className="flex items-center gap-1.5">
+                      Currency
+                      <InfoTooltip text="The currency this expense was paid in. Defaults to your household's primary currency." />
+                    </FormLabel>
                     <Select onValueChange={(v) => { field.onChange(v); trackEvent(EXPENSE_FORM_FIELD_EDITED, { field_name: "currency" }); }} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="currency-override-select" className="h-9">
-                          <SelectValue placeholder="Select currency" />
+                          <SelectValue placeholder="Select currency" className="truncate" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {SUPPORTED_CURRENCIES.map((cur) => (
                           <SelectItem key={cur} value={cur}>
-                            {cur}{cur === currency ? " (Default)" : ""}
+                            <span className="sm:hidden">{cur}</span>
+                            <span className="hidden sm:inline">{cur}{cur === currency ? " (Default)" : ""}</span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -902,50 +984,88 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                 <Label htmlFor="recurring-toggle" className="flex items-center gap-2 text-sm font-medium text-slate-200">
                   <Repeat className="w-4 h-4" />
                   Recurring
+                  <InfoTooltip text="Mark this as a recurring expense (e.g., rent, subscriptions). Set the frequency to automatically remind you." />
+                  <span className={`text-xs ${isRecurring ? "text-green-400" : "text-slate-500"}`}>
+                    {isRecurring ? "On" : "Off"}
+                  </span>
                 </Label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Switch
-                        id="recurring-toggle"
-                        checked={isRecurring ?? false}
-                        onCheckedChange={(checked) => form.setValue("is_recurring", checked)}
-                        data-testid="recurring-toggle"
-                        aria-label="Mark as recurring expense"
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Mark this as a repeating expense</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Switch
+                  id="recurring-toggle"
+                  checked={isRecurring ?? false}
+                  onCheckedChange={(checked) => form.setValue("is_recurring", checked)}
+                  data-testid="recurring-toggle"
+                  aria-label="Mark as recurring expense"
+                />
               </div>
             )}
 
             {/* Frequency selector — shown when recurring is ON */}
             {expenseType !== "settlement" && isRecurring && (
-              <FormField
-                control={form.control}
-                name="recurring_frequency"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Frequency</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value ?? "monthly"}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Monthly" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="yearly">Yearly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
+              <>
+                <FormField
+                  control={form.control}
+                  name="recurring_frequency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Frequency</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? "monthly"}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Monthly" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="yearly">Yearly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                {/* Next occurrence date */}
+                {(() => {
+                  const dateVal = form.getValues("date");
+                  const freq = form.getValues("recurring_frequency") ?? "monthly";
+                  if (!dateVal) return null;
+                  const base = new Date(dateVal);
+                  if (isNaN(base.getTime())) return null;
+                  let next: Date;
+                  switch (freq) {
+                    case "daily":
+                      next = new Date(base);
+                      next.setDate(next.getDate() + 1);
+                      break;
+                    case "weekly":
+                      next = new Date(base);
+                      next.setDate(next.getDate() + 7);
+                      break;
+                    case "monthly": {
+                      next = new Date(base);
+                      const day = next.getDate();
+                      next.setMonth(next.getMonth() + 1);
+                      if (next.getDate() !== day) next.setDate(0); // handle month-end
+                      break;
+                    }
+                    case "yearly":
+                      next = new Date(base);
+                      next.setFullYear(next.getFullYear() + 1);
+                      if (next.getMonth() !== base.getMonth()) next.setDate(0); // leap year
+                      break;
+                    default:
+                      return null;
+                  }
+                  const isOverdue = next < new Date();
+                  const formatted = next.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  return (
+                    <p className={`flex items-center gap-1 text-xs ${isOverdue ? "text-amber-400" : "text-blue-400/80"}`}>
+                      <CalendarClock className="w-3 h-3" />
+                      Next: {formatted}{isOverdue ? " (overdue)" : ""}
+                    </p>
+                  );
+                })()}
+              </>
             )}
 
             {/* Notes — compact single line */}
@@ -954,7 +1074,10 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notes <span className="text-xs text-slate-500 font-normal">(optional)</span></FormLabel>
+                  <FormLabel className="flex items-center gap-1.5">
+                    Notes <span className="text-xs text-slate-500 font-normal">(optional)</span>
+                    <InfoTooltip text="Optional details about this expense. Only visible to you and your partner." />
+                  </FormLabel>
                   <FormControl>
                     <Input
                       {...field}

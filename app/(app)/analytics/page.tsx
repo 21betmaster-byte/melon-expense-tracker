@@ -16,6 +16,7 @@ import { MoMTrendChart } from "@/components/analytics/MoMTrendChart";
 import { CategoryMoMChart } from "@/components/analytics/CategoryMoMChart";
 import { MemberContributionChart } from "@/components/analytics/MemberContributionChart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   Select,
   SelectContent,
@@ -178,7 +179,7 @@ export default function AnalyticsPage() {
   const selectedGroupName = activeGroup?.name ?? "All Groups";
 
   return (
-    <div className="space-y-8 pt-4">
+    <div className="space-y-4 pt-4">
       {/* Page Header with Group + Currency + Time Filter */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-lg font-semibold text-slate-100 min-w-0 truncate">
@@ -187,6 +188,7 @@ export default function AnalyticsPage() {
 
         <div className="flex items-center gap-2">
           {/* Time Period */}
+          <InfoTooltip text="Adjust how many months of data to include in the analytics (3, 6, 9, or 12 months)." />
           <Select value={timePeriod} onValueChange={(v) => { setTimePeriod(v); trackEvent(ANALYTICS_FILTER_APPLIED, { filter_type: "time_period", value: v }); }}>
             <SelectTrigger
               className="bg-slate-800 border-slate-700 w-[110px] shrink-0"
@@ -277,8 +279,9 @@ export default function AnalyticsPage() {
       {/* MoM Total Expenses */}
       <section data-testid="mom-trend-chart">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide">
+          <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide inline-flex items-center gap-1">
             Total Expenses — Month on Month
+            <InfoTooltip text="Month-over-month trend of your total spending. Use the category filter to see trends for specific categories. Toggle between bar and line chart." />
           </h2>
           <div className="flex items-center gap-2">
             <Select value={momCategoryFilter} onValueChange={(v) => { setMomCategoryFilter(v); if (v !== "all") trackEvent(ANALYTICS_FILTER_APPLIED, { filter_type: "mom_category", value: v }); }}>
@@ -317,8 +320,9 @@ export default function AnalyticsPage() {
 
       {/* Category-wise MoM */}
       <section data-testid="category-mom-trend-chart">
-        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">
+        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3 inline-flex items-center gap-1">
           Category Breakdown — Month on Month
+          <InfoTooltip text="Stacked breakdown showing how much you spent in each category per month. Helps identify which categories are growing." />
         </h2>
         {loading ? (
           <Skeleton className="h-72 w-full rounded-xl bg-slate-800" />
@@ -333,8 +337,9 @@ export default function AnalyticsPage() {
 
       {/* Member Contributions (Stacked Bar Chart) */}
       <section data-testid="member-contribution-chart">
-        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">
+        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3 inline-flex items-center gap-1">
           Who Paid What
+          <InfoTooltip text="Shows how much each household member paid per month. Helps visualize who's covering more expenses." />
         </h2>
         {loading ? (
           <Skeleton className="h-72 w-full rounded-xl bg-slate-800" />
@@ -349,8 +354,9 @@ export default function AnalyticsPage() {
 
       {/* Category Pie Chart */}
       <section>
-        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">
+        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3 inline-flex items-center gap-1">
           Category Breakdown
+          <InfoTooltip text="Overall distribution of spending by category for the selected time period." />
         </h2>
         {loading ? (
           <Skeleton className="h-72 w-full rounded-xl bg-slate-800" />

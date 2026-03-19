@@ -2,11 +2,11 @@
 import { useEffect, useState } from "react";
 
 export const useOnlineStatus = (): boolean => {
-  const [isOnline, setIsOnline] = useState(
-    typeof window !== "undefined" ? navigator.onLine : true
-  );
+  const [isOnline, setIsOnline] = useState(true); // Always true on SSR — synced client-side below
 
   useEffect(() => {
+    setIsOnline(navigator.onLine);
+
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
