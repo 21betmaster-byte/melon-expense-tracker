@@ -523,12 +523,35 @@ test.describe("Suite M: PRD v2 Regression (M1-M18)", () => {
       return;
     }
 
-    // Set slider to a non-50 value (e.g., 70)
-    await slider.fill("70");
+    // The Radix Slider renders a thumb with role="slider" and aria-valuenow
+    const thumb = slider.locator('[role="slider"]');
+    await expect(thumb).toBeVisible({ timeout: 2000 });
+    const startValue = parseInt(await thumb.getAttribute("aria-valuenow") ?? "50", 10);
+
+    // First reset towards left, then move right to ensure a change from the saved value
+    await thumb.focus();
+    for (let i = 0; i < 20; i++) {
+      await thumb.press("ArrowLeft");
+    }
+    await page.waitForTimeout(200);
+    // Now move right to land at a different value than the start
+    for (let i = 0; i < 14; i++) {
+      await thumb.press("ArrowRight");
+    }
     await page.waitForTimeout(500);
 
-    // Click save button
+    const newValue = parseInt(await thumb.getAttribute("aria-valuenow") ?? "50", 10);
+
+    // If value didn't actually change from saved (e.g. was already at this position),
+    // nudge once more
+    if (newValue === startValue) {
+      await thumb.press("ArrowRight");
+      await page.waitForTimeout(200);
+    }
+
+    // Click save button — wait for it to become enabled (hasChanged must be true)
     const saveBtn = page.locator('[data-testid="save-split-ratio-btn"]');
+    await expect(saveBtn).toBeEnabled({ timeout: 5000 });
     await saveBtn.click();
     await page.waitForTimeout(2000);
 
@@ -553,13 +576,14 @@ test.describe("Suite M: PRD v2 Regression (M1-M18)", () => {
     const stage2 = page.locator('[data-testid="stage2-fields"]');
     await expect(stage2).toBeVisible({ timeout: 5000 });
 
-    // Check the split ratio slider value
+    // Check the split ratio slider value (also a Radix Slider)
     const splitRatio = page.locator('[data-testid="split-ratio-input"]');
     const splitVisible = await splitRatio.isVisible().catch(() => false);
 
     if (splitVisible) {
-      const value = await splitRatio.inputValue();
-      expect(value).not.toBe("50");
+      const splitThumb = splitRatio.locator('[role="slider"]');
+      const value = await splitThumb.getAttribute("aria-valuenow") ?? "50";
+      expect(parseInt(value, 10)).not.toBe(50);
     }
 
     // Close dialog
@@ -632,9 +656,17 @@ test.describe("Suite M: PRD v2 Regression (M1-M18)", () => {
     const stage2 = page.locator('[data-testid="stage2-fields"]');
     await expect(stage2).toBeVisible({ timeout: 5000 });
 
-    // Look for the inline-category-trigger button
-    const categoryTrigger = page.locator('[data-testid="inline-category-trigger"]');
-    await expect(categoryTrigger).toBeVisible({ timeout: 5000 });
+    // The "+ New" category pill may be hidden behind "Show more" if there are 8+ categories
+    // Click "Show more" if present to reveal all pills
+    const showMore = stage2.getByText(/Show more/i);
+    if (await showMore.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await showMore.click();
+      await page.waitForTimeout(300);
+    }
+
+    // Look for the "+ New" category pill button
+    const newCategoryPill = stage2.locator('button[role="radio"]').filter({ hasText: /New/ });
+    await expect(newCategoryPill).toBeVisible({ timeout: 5000 });
 
     // Close dialog
     await page.keyboard.press("Escape");
