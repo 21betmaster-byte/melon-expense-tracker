@@ -43,7 +43,8 @@ export const DefaultSplitRatio = () => {
       setHousehold({ ...household, default_split_ratio: decimalValue });
       setSavedPct(pct);
       toast.success("Default split ratio updated.");
-    } catch {
+    } catch (error) {
+      console.error("[DefaultSplitRatio] Failed to update split ratio:", error);
       toast.error("Failed to update split ratio.");
     } finally {
       setSaving(false);

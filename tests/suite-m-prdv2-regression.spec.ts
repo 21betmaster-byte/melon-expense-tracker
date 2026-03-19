@@ -25,6 +25,7 @@ import { requireAuth, requireAuthOrSkip } from "./helpers/auth-guard";
  *  E-12   | Analytics insights card spacing
  *  E-11   | Default split ratio setting exists
  *  E-11   | Default split ratio affects expense form
+ *  E-11   | Split ratio save button re-enables after second adjustment
  *  E-05   | Swipe-to-delete on expense card
  *  E-07   | Expense form category pills include "Create New" at bottom
  */
@@ -589,6 +590,54 @@ test.describe("Suite M: PRD v2 Regression (M1-M18)", () => {
     // Close dialog
     await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
+  });
+
+  // ─── E-11: Save button re-enables after save-adjust-save cycle ─────
+
+  test("M16b: Split ratio save button re-enables after second adjustment (E-11)", async ({ page }) => {
+    await requireAuth(page, "/settings");
+    await page.waitForTimeout(5000);
+
+    const slider = page.locator('[data-testid="default-split-slider"]');
+    const sliderVisible = await slider.isVisible().catch(() => false);
+
+    if (!sliderVisible) {
+      console.log("[M16b] Default split slider not found — skipping");
+      test.skip();
+      return;
+    }
+
+    const thumb = slider.locator('[role="slider"]');
+    await expect(thumb).toBeVisible({ timeout: 2000 });
+
+    const saveBtn = page.locator('[data-testid="save-split-ratio-btn"]');
+
+    // ── First save: move slider left and save ──
+    await thumb.focus();
+    for (let i = 0; i < 10; i++) await thumb.press("ArrowLeft");
+    await page.waitForTimeout(300);
+
+    await expect(saveBtn).toBeEnabled({ timeout: 3000 });
+    await saveBtn.click();
+    await page.waitForTimeout(2000);
+
+    // After save, button should be disabled (no change pending)
+    await expect(saveBtn).toBeDisabled({ timeout: 3000 });
+
+    // ── Second adjustment: move slider right ──
+    await thumb.focus();
+    for (let i = 0; i < 6; i++) await thumb.press("ArrowRight");
+    await page.waitForTimeout(300);
+
+    // Save button must re-enable after second adjustment
+    await expect(saveBtn).toBeEnabled({ timeout: 3000 });
+
+    // ── Second save ──
+    await saveBtn.click();
+    await page.waitForTimeout(2000);
+
+    // After second save, button should be disabled again
+    await expect(saveBtn).toBeDisabled({ timeout: 3000 });
   });
 
   // ─── E-05: Swipe-to-delete on expense card ─────────────────────────
