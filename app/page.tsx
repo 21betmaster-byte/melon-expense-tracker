@@ -240,7 +240,7 @@ export default function HomePage() {
               </h3>
               <p className="text-slate-400 mb-6">
                 Beautiful charts that make spending patterns obvious. Monthly
-                trends, category breakdowns, and AI-powered insights — all
+                trends, category breakdowns, and real actionable insights — all
                 updated in real-time.
               </p>
               <ul className="space-y-3">
