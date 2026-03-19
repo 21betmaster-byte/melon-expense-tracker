@@ -59,7 +59,6 @@ export const ExpenseCard = ({ expense }: Props) => {
   const paidBy = members.find((m) => m.uid === expense.paid_by_user_id);
   const householdCurrency = household?.currency ?? "INR";
   const displayCurrency = expense.currency ?? householdCurrency;
-  const showCurrencyBadge = !!expense.currency && expense.currency !== householdCurrency;
   const typeColor = TYPE_COLORS[expense.expense_type] ?? "";
 
   // Swipe-to-delete
@@ -148,7 +147,7 @@ export const ExpenseCard = ({ expense }: Props) => {
             data-testid="expense-card"
             onClick={handleCardClick}
           >
-            <CardContent className="p-3">
+            <CardContent className="px-3 py-2">
               {/* Row 1: Description + Amount */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -191,15 +190,6 @@ export const ExpenseCard = ({ expense }: Props) => {
                 >
                   {TYPE_LABELS[expense.expense_type] ?? expense.expense_type}
                 </Badge>
-                {showCurrencyBadge && (
-                  <Badge
-                    variant="outline"
-                    className="text-[11px] text-amber-400 border-amber-800 py-0 px-1.5"
-                    data-testid="expense-currency-badge"
-                  >
-                    {expense.currency}
-                  </Badge>
-                )}
                 {expense.is_recurring && (
                   <Repeat
                     className="w-3 h-3 text-purple-400"

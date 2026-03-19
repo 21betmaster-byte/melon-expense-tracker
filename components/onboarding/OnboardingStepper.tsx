@@ -27,9 +27,9 @@ export const OnboardingStepper = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Progress dots */}
-      <div className="flex justify-center gap-2 mb-6" data-testid="stepper-progress">
+      <div className="flex justify-center gap-2 mb-4" data-testid="stepper-progress">
         {[1, 2, 3, 4].map((s) => (
           <div
             key={s}
@@ -46,7 +46,7 @@ export const OnboardingStepper = () => {
 
       {/* Step counter */}
       <p
-        className="text-xs text-slate-500 text-center mb-4"
+        className="text-xs text-slate-500 text-center mb-3"
         data-testid="stepper-counter"
       >
         Step {step} of 4

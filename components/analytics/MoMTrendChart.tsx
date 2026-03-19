@@ -55,8 +55,11 @@ export const MoMTrendChart = ({
             backgroundColor: "#0f172a",
             border: "1px solid #334155",
             borderRadius: 8,
+            color: "#e2e8f0",
           }}
           labelStyle={{ color: "#94a3b8" }}
+          itemStyle={{ color: "#e2e8f0" }}
+          cursor={{ fill: "rgba(255,255,255,0.05)" }}
           formatter={(value: number | undefined) => [
             formatCurrency(value ?? 0, currency),
             "Total",

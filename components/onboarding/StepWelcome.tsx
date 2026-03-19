@@ -9,7 +9,7 @@ interface StepWelcomeProps {
 
 export const StepWelcome = ({ onNext, onSkip }: StepWelcomeProps) => {
   return (
-    <div className="text-center space-y-6 py-4" data-testid="stepper-welcome">
+    <div className="text-center space-y-5 py-2" data-testid="stepper-welcome">
       <div className="flex justify-center">
         <div className="w-16 h-16 rounded-full bg-blue-600/20 flex items-center justify-center">
           <Home className="w-8 h-8 text-blue-400" />

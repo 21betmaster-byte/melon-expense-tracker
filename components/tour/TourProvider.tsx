@@ -327,33 +327,46 @@ const TourOverlay = ({
     return null;
   }
 
+  /* ── Spotlight cutout box-shadow (creates a true visible hole in the overlay) */
+  const spotlightPad = 8;
+  const spotlightBoxShadow = rect
+    ? `0 0 0 4px rgba(96,165,250,0.7), 0 0 0 9999px rgba(0,0,0,0.6)`
+    : undefined;
+
   return (
     <>
-      {/* Dimmed backdrop */}
-      <div
-        className="fixed inset-0 z-[60] transition-all duration-300"
-        style={{
-          backgroundColor: "rgba(0,0,0,0.6)",
-        }}
-        onClick={onSkip}
-        data-testid="tour-overlay"
-      />
+      {/* Dimmed backdrop — for virtual steps only; real targets use spotlight box-shadow */}
+      {isVirtual && (
+        <div
+          className="fixed inset-0 z-[60] transition-all duration-300"
+          style={{
+            backgroundColor: "rgba(0,0,0,0.6)",
+          }}
+          onClick={onSkip}
+          data-testid="tour-overlay"
+        />
+      )}
 
-      {/* Spotlight cutout over target element */}
+      {/* Spotlight cutout over target element — acts as both backdrop and highlight */}
       {rect && !isVirtual && (
         <div
-          className="fixed z-[61] rounded-lg ring-2 ring-blue-400 ring-offset-2 ring-offset-transparent animate-pulse"
-          style={{
-            top: rect.top - 10,
-            left: rect.left - 10,
-            width: rect.width + 20,
-            height: rect.height + 20,
-            pointerEvents: "none",
-            backgroundColor: "transparent",
-            boxShadow: "none",
-          }}
-          data-testid="tour-spotlight"
-        />
+          className="fixed inset-0 z-[60]"
+          onClick={onSkip}
+          data-testid="tour-overlay"
+        >
+          <div
+            className="fixed z-[61] rounded-lg animate-pulse"
+            style={{
+              top: rect.top - spotlightPad,
+              left: rect.left - spotlightPad,
+              width: rect.width + spotlightPad * 2,
+              height: rect.height + spotlightPad * 2,
+              pointerEvents: "none",
+              boxShadow: spotlightBoxShadow,
+            }}
+            data-testid="tour-spotlight"
+          />
+        </div>
       )}
 
       {/* Tooltip card */}
@@ -363,7 +376,7 @@ const TourOverlay = ({
         data-testid="tour-tooltip"
       >
         <Card className="bg-slate-900 border-blue-800/50 shadow-xl">
-          <CardContent className="p-4 space-y-3">
+          <CardContent className="px-4 py-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-slate-100">
                 {step.title}
@@ -376,14 +389,14 @@ const TourOverlay = ({
                 {stepIndex + 1} of {totalSteps}
               </Badge>
             </div>
-            <p className="text-xs text-slate-400">{step.description}</p>
-            <div className="flex justify-between">
+            <p className="text-xs text-slate-400 leading-snug">{step.description}</p>
+            <div className="flex justify-between pt-1">
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={onSkip}
                 data-testid="tour-skip-btn"
-                className="text-slate-500"
+                className="text-slate-500 h-8"
               >
                 Skip tour
               </Button>
@@ -394,7 +407,7 @@ const TourOverlay = ({
                     variant="outline"
                     onClick={handleEnableNotifications}
                     data-testid="tour-enable-notifications-btn"
-                    className="text-blue-400 border-blue-500/30"
+                    className="text-blue-400 border-blue-500/30 h-8"
                   >
                     Enable
                   </Button>
@@ -403,6 +416,7 @@ const TourOverlay = ({
                   size="sm"
                   onClick={onNext}
                   data-testid="tour-next-btn"
+                  className="h-8"
                 >
                   {isLastStep ? "Get started" : "Next"}
                 </Button>

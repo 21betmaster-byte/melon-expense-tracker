@@ -19,6 +19,7 @@ export const InfoTooltip = ({ text, className }: InfoTooltipProps) => {
         <TooltipTrigger asChild>
           <button
             type="button"
+            tabIndex={-1}
             className={`inline-flex items-center text-slate-500 hover:text-slate-400 transition-colors ${className ?? ""}`}
             onClick={(e) => e.preventDefault()}
             aria-label="More info"

@@ -191,9 +191,11 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
   const amountValue = form.watch("amount");
   const expenseType = form.watch("expense_type");
   const isRecurring = form.watch("is_recurring");
+  const recurringFrequency = form.watch("recurring_frequency");
   const paidByUserId = form.watch("paid_by_user_id");
   const splitPct = form.watch("split_pct");
   const categoryIdValue = form.watch("category_id");
+  const dateValue = form.watch("date");
 
   // When "Paid for Partner" is selected, auto-set split to 0%
   useEffect(() => {
@@ -242,6 +244,8 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
   // Priority: (1) memory match, (2) keyword match, (3) leave blank
   useEffect(() => {
     if (isEditMode) return; // Don't auto-categorize in edit mode
+    if (pendingCategorySelect) return; // Don't overwrite pending new category
+    if (userManuallyChangedCategory.current) return; // Don't overwrite manual selection
     if (debouncedDesc.length > 2) {
       // First check memory
       const memoryCatId = memoryCategory(debouncedDesc, memoryMap);
@@ -252,7 +256,6 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
           setSuggestedCategoryId(memoryCatId);
           setCategorySource("memory");
           form.setValue("category_id", memoryCatId);
-          userManuallyChangedCategory.current = false;
           return;
         }
       }
@@ -263,11 +266,10 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
         setSuggestedCategoryId(catId);
         setCategorySource("auto");
         form.setValue("category_id", catId);
-        userManuallyChangedCategory.current = false;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedDesc, categories, isEditMode]);
+  }, [debouncedDesc, categories, isEditMode, pendingCategorySelect]);
 
   // Auto-select newly created category after store update
   useEffect(() => {
@@ -1026,8 +1028,8 @@ export const ExpenseForm = ({ onSuccess, editExpense, initialValues }: Props) =>
                 />
                 {/* Next occurrence date */}
                 {(() => {
-                  const dateVal = form.getValues("date");
-                  const freq = form.getValues("recurring_frequency") ?? "monthly";
+                  const dateVal = dateValue;
+                  const freq = recurringFrequency ?? "monthly";
                   if (!dateVal) return null;
                   const base = new Date(dateVal);
                   if (isNaN(base.getTime())) return null;

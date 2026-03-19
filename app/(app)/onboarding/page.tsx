@@ -16,7 +16,7 @@ export default function OnboardingPage() {
   }, [user, router]);
 
   return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center py-12">
+    <div className="min-h-dvh flex flex-col items-center justify-center px-4 pt-[env(safe-area-inset-top,16px)] pb-[env(safe-area-inset-bottom,16px)]">
       <div className="w-full max-w-sm">
         <OnboardingStepper />
       </div>

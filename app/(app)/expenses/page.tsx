@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, X, Download } from "lucide-react";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { PillSelect } from "@/components/ui/pill-select";
 import { useAppStore } from "@/store/useAppStore";
 import { exportExpensesToCSV } from "@/lib/utils/export";
 import { TrendingDown, TrendingUp } from "lucide-react";
@@ -45,9 +44,19 @@ export default function ExpensesPage() {
   const [paidByFilter, setPaidByFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [currencyFilter, setCurrencyFilter] = useState<string>("all");
   const [advFilters, setAdvFilters] = useState<AdvancedFilterValues>(EMPTY_ADV_FILTERS);
   const { activeGroup, expenses, categories, members, household, user } = useAppStore();
   const householdCurrency = household?.currency ?? "INR";
+
+  // Build unique currencies used in expenses for currency filter
+  const usedCurrencies = useMemo(() => {
+    const currSet = new Set<string>();
+    for (const exp of expenses) {
+      currSet.add(exp.currency ?? householdCurrency);
+    }
+    return Array.from(currSet).sort();
+  }, [expenses, householdCurrency]);
 
   // Count recurring expenses for the tab badge
   const recurringCount = useMemo(
@@ -66,6 +75,7 @@ export default function ExpensesPage() {
       setPaidByFilter("all");
       setTypeFilter("all");
       setCategoryFilter([]);
+      setCurrencyFilter("all");
       setAdvFilters(EMPTY_ADV_FILTERS);
       prevGroupId.current = activeGroup?.id;
     }
@@ -121,6 +131,11 @@ export default function ExpensesPage() {
       result = result.filter((exp) => categoryFilter.includes(exp.category_id));
     }
 
+    // Stage 2d: Currency filter
+    if (currencyFilter !== "all") {
+      result = result.filter((exp) => (exp.currency ?? householdCurrency) === currencyFilter);
+    }
+
     // Stage 3: Search filter
     if (debouncedQuery.trim()) {
       const q = debouncedQuery.toLowerCase().trim();
@@ -161,7 +176,7 @@ export default function ExpensesPage() {
     }
 
     return result;
-  }, [expenses, monthFilter, paidByFilter, typeFilter, categoryFilter, debouncedQuery, categories, members, advFilters]);
+  }, [expenses, monthFilter, paidByFilter, typeFilter, categoryFilter, currencyFilter, householdCurrency, debouncedQuery, categories, members, advFilters]);
 
   // Sort filtered expenses
   const sorted = useMemo(() => {
@@ -272,6 +287,7 @@ export default function ExpensesPage() {
     paidByFilter !== "all" ||
     typeFilter !== "all" ||
     categoryFilter.length > 0 ||
+    currencyFilter !== "all" ||
     advFilterActive;
 
   const emptyMessage = isFilterActive
@@ -376,7 +392,7 @@ export default function ExpensesPage() {
             </Card>
           </div>
 
-          {/* Filter Row: Month + Advanced Filters */}
+          {/* Filter Row: Month + Filters Popover */}
           <div className="flex flex-wrap items-center gap-2">
             <Select value={monthFilter} onValueChange={(v) => { setMonthFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "month", value: v }); }}>
               <SelectTrigger
@@ -397,6 +413,18 @@ export default function ExpensesPage() {
               filters={advFilters}
               onApply={setAdvFilters}
               onClear={() => setAdvFilters(EMPTY_ADV_FILTERS)}
+              paidByFilter={paidByFilter}
+              onPaidByChange={(v) => { setPaidByFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "paid_by" }); }}
+              typeFilter={typeFilter}
+              onTypeChange={(v) => { setTypeFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "type", value: v }); }}
+              categoryFilter={categoryFilter}
+              onCategoryChange={(v) => { setCategoryFilter(v); if (v.length > 0) trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "category" }); }}
+              currencyFilter={currencyFilter}
+              onCurrencyChange={(v) => { setCurrencyFilter(v); if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "currency", value: v }); }}
+              members={members}
+              categories={categories}
+              currencies={usedCurrencies}
+              currentUserUid={user?.uid}
             />
             {isFilterActive && (
               <button
@@ -406,6 +434,7 @@ export default function ExpensesPage() {
                   setPaidByFilter("all");
                   setTypeFilter("all");
                   setCategoryFilter([]);
+                  setCurrencyFilter("all");
                   setSearchQuery("");
                   setAdvFilters(EMPTY_ADV_FILTERS);
                 }}
@@ -415,69 +444,6 @@ export default function ExpensesPage() {
               </button>
             )}
           </div>
-
-          {/* Type filter pills */}
-          <div>
-            <p className="text-xs text-slate-500 mb-1">
-              Type{typeFilter !== "all" ? " (1)" : ""}
-            </p>
-            <PillSelect
-              options={[
-                { value: "all", label: "All" },
-                { value: "joint", label: "Joint" },
-                { value: "solo", label: "Solo" },
-                { value: "settlement", label: "Settlement" },
-                { value: "paid_for_partner", label: "Paid for Partner" },
-              ]}
-              value={typeFilter}
-              onChange={(v) => {
-                setTypeFilter(v as string);
-                if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "type", value: v as string });
-              }}
-            />
-          </div>
-
-          {/* Paid By filter pills */}
-          <div>
-            <p className="text-xs text-slate-500 mb-1">
-              Paid By{paidByFilter !== "all" ? " (1)" : ""}
-            </p>
-            <PillSelect
-              options={[
-                { value: "all", label: "Everyone" },
-                ...members.map((m) => ({
-                  value: m.uid,
-                  label: m.uid === user?.uid ? `${m.name} (You)` : m.name,
-                })),
-              ]}
-              value={paidByFilter}
-              onChange={(v) => {
-                setPaidByFilter(v as string);
-                if (v !== "all") trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "paid_by" });
-              }}
-            />
-          </div>
-
-          {/* Category filter pills (multi-select) */}
-          {categories.length > 0 && (
-            <div>
-              <p className="text-xs text-slate-500 mb-1">
-                Category{categoryFilter.length > 0 ? ` (${categoryFilter.length})` : ""}
-              </p>
-              <div className="overflow-x-auto">
-                <PillSelect
-                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                  value={categoryFilter}
-                  onChange={(v) => {
-                    setCategoryFilter(v as string[]);
-                    trackEvent(EXPENSE_FILTER_APPLIED, { filter_type: "category" });
-                  }}
-                  multiSelect
-                  variant="purple"
-                />
-              </div>
-            </div>
-          )}
 
           {/* Search + Sort Row */}
           <div className="flex items-center gap-2">
