@@ -42,8 +42,8 @@ test.describe("Suite H: Advanced Filters — Amount & Date Range", () => {
     await btn.click();
     await page.waitForTimeout(500);
 
-    // Popover content should be visible
-    const popover = page.locator("text=Advanced Filters");
+    // Popover content should be visible (title is "Filters")
+    const popover = page.locator('[data-testid="filter-apply-btn"]');
     await expect(popover).toBeVisible({ timeout: 3000 });
   });
 
